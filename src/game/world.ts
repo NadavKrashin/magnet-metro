@@ -37,6 +37,8 @@ const DRIFT_SPEED = 1.4;
 const MAX_SCRAP_SPEED = 115;
 /** Matching hazards are drawn in at this fraction of the field strength. */
 const HAZARD_PULL_FACTOR = 0.22;
+/** How much of the course tail-end is given over to the closing set piece. */
+export const PRESS_ZONE = 150;
 /** Course distance given over to the scripted teaching sequence. */
 export const OPENING_LENGTH = 290;
 /** Absorbing a matching hazard is worth this much before the combo multiplier. */
@@ -117,6 +119,7 @@ export class World {
 
   stats: RunStats = {
     collected: 0,
+    absorbed: 0,
     missed: 0,
     hits: 0,
     maxCombo: 0,
@@ -125,6 +128,9 @@ export class World {
   };
 
   private spawnCursor = 60;
+  /** Colour of the closing set piece, decided once so the whole wall matches. */
+  pressPolarity: Polarity = 0;
+  private inPress = false;
   private viewHeight = 142;
 
   /** Permanent upgrades bought in the shop. Defaults to an unmodified drone. */
@@ -320,7 +326,11 @@ export class World {
       if (absorbable) {
         this.absorbHazard(h);
       } else if (this.invulnTimer <= 0 && !f.invulnerable) {
-        this.takeHit(h);
+        // The closing set piece gambles the haul, never the run. Getting it wrong should mean
+        // finishing small, not failing to finish — every run needs to reach its ending, both
+        // because that is the shape of a satisfying arc and because the ending is the clip.
+        if (h.press) this.crashPress(h);
+        else this.takeHit(h);
       }
     }
   }
@@ -358,6 +368,7 @@ export class World {
     const gained = Math.round(HAZARD_ABSORB_VALUE * this.multiplier * this.mods.valueScale);
     this.score += gained;
     this.stats.collected += 1;
+    this.stats.absorbed += 1;
     this.collectPulse = 1;
 
     // The whole reason to change colour, so it gets the full treatment: a shove, a freeze,
@@ -377,6 +388,25 @@ export class World {
     this.burst(h.x, h.y, 26, color);
     this.float(h.x, h.y, `+${gained}`, color);
     this.events?.onAbsorb();
+  }
+
+  /** Mismatching the press: it costs most of what you were carrying, but not a cell. */
+  private crashPress(h: Hazard): void {
+    this.combo = 0;
+    this.invulnTimer = INVULN_AFTER_HIT;
+    this.shake = Math.min(this.shake + 2.2, 3);
+    this.hitFlash = 1;
+    this.hitStop = Math.max(this.hitStop, 0.13);
+
+    const lost = Math.ceil(this.chain.length * 0.45);
+    for (let i = 0; i < lost; i++) {
+      const item = this.chain.pop();
+      if (!item) break;
+      this.burst(item.x, item.y, 4, ink.key);
+    }
+    this.burst(h.x, h.y, 26, ink.key);
+    this.float(this.player.x, this.player.y + 4, "WRONG COLOUR", ink.key);
+    this.events?.onHit();
   }
 
   private takeHit(h: Hazard): void {
@@ -516,6 +546,7 @@ export class World {
     const rng = this.rng;
 
     if (y < OPENING_LENGTH) return this.openingLesson(y);
+    if (this.options.charged && y >= COURSE_LENGTH - PRESS_ZONE) return this.press(y);
 
     const roll = rng.next();
     const hard = smoothstep(0.2, 1, t);
@@ -608,6 +639,33 @@ export class World {
     for (let i = 0; i < count; i++) {
       this.addScrap(clamp(x, -TRACK_HALF + 2, TRACK_HALF - 2), y + i * 5.5, pol, SCRAP_VALUE);
     }
+  }
+
+  /**
+   * The climax. Every course ends against a solid wall of one colour, four rows deep with no
+   * gap, telegraphed far enough ahead to be a decision rather than an ambush.
+   *
+   * Match it and you swallow the entire thing — the single biggest payoff in the game, and
+   * the five seconds anyone would actually clip and share. Get it wrong and it costs a cell
+   * and a third of everything you were carrying. The run needed an ending; a course that just
+   * stops at a distance marker has no shape to it.
+   */
+  private press(y: number): number {
+    // One colour for the whole structure, fixed from the seed so a shared course always ends
+    // the same way for everyone who plays it.
+    if (this.pressPolarity === 0) this.pressPolarity = this.rng.chance(0.5) ? 1 : -1;
+
+    const rows = 4;
+    const across = 9;
+    this.inPress = true;
+    for (let r = 0; r < rows; r++) {
+      for (let i = 0; i < across; i++) {
+        const x = -TRACK_HALF + 2.5 + (i / (across - 1)) * (TRACK_HALF * 2 - 5);
+        this.addHazard(x, y + r * 9, "block", this.pressPolarity, 0);
+      }
+    }
+    this.inPress = false;
+    return rows * 9 + 14;
   }
 
   private randomCharge(): Polarity {
@@ -752,6 +810,7 @@ export class World {
       driftAmp: drift,
       driftPhase: this.rng.range(0, Math.PI * 2),
       absorbed: false,
+      press: this.inPress,
     });
   }
 }

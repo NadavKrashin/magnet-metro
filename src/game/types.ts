@@ -28,6 +28,8 @@ export interface Hazard {
   driftPhase: number;
   /** Set when swallowed by a matching-colour drone, so it can be cleared next cull. */
   absorbed: boolean;
+  /** Part of the closing set piece. Costs haul rather than lives when mismatched. */
+  press: boolean;
 }
 
 export interface Anchor {
@@ -98,6 +100,8 @@ export interface Field {
 
 export interface RunStats {
   collected: number;
+  /** Hazards swallowed by matching their colour. The signature act of the game. */
+  absorbed: number;
   missed: number;
   hits: number;
   maxCombo: number;

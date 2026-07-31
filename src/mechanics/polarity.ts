@@ -1,6 +1,6 @@
 import type { InputState } from "../core/input";
 import type { View } from "../render/view";
-import { OPENING_LENGTH, type World } from "../game/world";
+import { COURSE_LENGTH, OPENING_LENGTH, PRESS_ZONE, type World } from "../game/world";
 import type { Polarity } from "../game/types";
 import { TAU } from "../core/math";
 import { inkFor } from "../render/palette";
@@ -92,6 +92,15 @@ export class PolarityMechanic implements Mechanic {
       }
     } else if (y < OPENING_LENGTH) {
       world.prompt = "YOUR COLOUR FEEDS YOU · THE OTHER HURTS";
+    } else if (world.pressPolarity !== 0 && y > COURSE_LENGTH - PRESS_ZONE - 90) {
+      // Called well before the wall is reachable. The whole point of the set piece is that
+      // the player sees it coming and chooses; a wall you cannot prepare for is just a tax.
+      if (this.polarity === world.pressPolarity) {
+        world.prompt = "THE PRESS — EAT IT ALL";
+      } else {
+        world.prompt = "THE PRESS — TAP TO MATCH IT";
+        world.promptUrgent = true;
+      }
     } else {
       world.prompt = "";
     }

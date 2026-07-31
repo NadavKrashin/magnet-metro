@@ -9,12 +9,15 @@ import { COURSE_LENGTH, VIEW_WIDTH, World } from "./game/world";
 import {
   EDITIONS,
   UPGRADES,
+  contractById,
+  dailyCode,
   editionById,
   levelOf,
   loadSave,
   modifiersFor,
   nextGoal,
   saveSave,
+  refillContracts,
   upgradeCost,
   type SaveData,
 } from "./game/progression";
@@ -81,6 +84,8 @@ class Game {
   private runs: RunRecord[] = loadRuns();
   private save: SaveData = loadSave();
   private shopTab: "upgrades" | "editions" = "upgrades";
+  /** True when the current run is on today's shared course. */
+  private isDaily = false;
   private seedCode = randomCode(new Rng(Date.now() >>> 0));
 
   private hud = el("hud");
@@ -107,7 +112,6 @@ class Game {
 
     this.input.attach(canvas);
     this.buildIntegrity();
-    this.buildMenu();
     this.seedInput.value = this.seedCode;
 
     // Browsers will not start audio without a gesture, so every entry point unlocks it.
@@ -120,6 +124,12 @@ class Game {
 
     el("btn-retry").addEventListener("click", () => this.startRun());
     el("btn-menu").addEventListener("click", () => this.showMenu());
+    el("btn-daily").addEventListener("click", () => {
+      this.seedCode = dailyCode();
+      this.seedInput.value = this.seedCode;
+      this.isDaily = true;
+      this.startRun();
+    });
     el("btn-shop").addEventListener("click", () => this.showShop());
     el("btn-shop-2").addEventListener("click", () => this.showShop());
     el("btn-shop-close").addEventListener("click", () => this.showMenu());
@@ -137,6 +147,7 @@ class Game {
 
     window.addEventListener("resize", this.onResize);
     this.onResize();
+    this.showMenu();
     this.loop.start();
   }
 
@@ -178,10 +189,58 @@ class Game {
         (stats ? `<div class="mech-best">${stats}</div>` : "");
       btn.addEventListener("click", () => {
         this.active = m;
+        this.isDaily = false;
         this.startRun();
       });
       list.appendChild(btn);
     }
+  }
+
+  private buildContracts(): void {
+    const list = el("contract-list");
+    list.innerHTML = "";
+    for (const active of this.save.contracts) {
+      const def = contractById(active.id);
+      if (!def) continue;
+      const pct = Math.min(100, (active.progress / def.target) * 100);
+      const row = document.createElement("div");
+      row.className = pct >= 100 ? "contract done" : "contract";
+      row.innerHTML =
+        `<div class="contract-top"><span>${def.text}</span>` +
+        `<span class="contract-reward">${active.progress.toLocaleString()}/${def.target.toLocaleString()} · +${def.reward.toLocaleString()}</span></div>` +
+        `<div class="contract-bar"><div class="contract-fill" style="width:${pct}%"></div></div>`;
+      list.appendChild(row);
+    }
+  }
+
+  /** Advance contracts, pay out anything finished, and draw replacements. */
+  private settleContracts(summary: {
+    score: number;
+    won: boolean;
+    absorbed: number;
+    collected: number;
+    maxCombo: number;
+    hits: number;
+  }): string[] {
+    const completed: string[] = [];
+    for (const active of this.save.contracts) {
+      const def = contractById(active.id);
+      if (!def || active.progress >= def.target) continue;
+      active.progress += def.measure(summary);
+      if (active.progress >= def.target) {
+        this.save.scrap += def.reward;
+        completed.push(`${def.text} — +${def.reward.toLocaleString()}`);
+      }
+    }
+    if (completed.length > 0) {
+      this.save.contracts = refillContracts(
+        this.save.contracts.filter((a) => {
+          const def = contractById(a.id);
+          return def ? a.progress < def.target : false;
+        }),
+      );
+    }
+    return completed;
   }
 
   private summaryFor(id: string): string {
@@ -222,7 +281,15 @@ class Game {
   private showMenu(): void {
     this.state = "menu";
     this.buildMenu();
+    this.buildContracts();
     el("bank-value").textContent = this.save.scrap.toLocaleString();
+
+    const today = dailyCode();
+    const done = this.save.dailyDate === today;
+    el("daily-note").textContent = done
+      ? `Your best today: ${this.save.dailyBest.toLocaleString()}`
+      : "Same course for everyone, once a day";
+
     this.shopEl.classList.add("hidden");
     this.hud.classList.add("hidden");
     this.resultsEl.classList.add("hidden");
@@ -254,13 +321,33 @@ class Game {
     this.save.scrap += record.score;
     this.save.lifetimeScrap += record.score;
     this.save.runs += 1;
+
+    const today = dailyCode();
+    if (this.isDaily) {
+      if (this.save.dailyDate !== today) {
+        this.save.dailyDate = today;
+        this.save.dailyBest = 0;
+      }
+      this.save.dailyBest = Math.max(this.save.dailyBest, record.score);
+    }
+
+    const completed = this.settleContracts({
+      score: record.score,
+      won: record.won,
+      absorbed: w.stats.absorbed,
+      collected: record.collected,
+      maxCombo: record.maxCombo,
+      hits: record.hits,
+    });
     saveSave(this.save);
 
     const prior = this.runs.filter((r) => r.mechanic === this.active.id && r !== record);
     const priorBest = prior.length ? Math.max(...prior.map((r) => r.score)) : 0;
 
     el("result-title").textContent = record.won
-      ? `${this.active.name} — course cleared`
+      ? this.isDaily
+        ? "Today's run — cleared"
+        : `${this.active.name} — course cleared`
       : `${this.active.name} — drone destroyed`;
     el("result-score").textContent = String(record.score);
     el("result-best").textContent =
@@ -279,6 +366,7 @@ class Game {
       ["Hits taken", String(record.hits)],
       ["Thumb actions", String(record.actions)],
       ["Time", `${record.duration.toFixed(1)}s`],
+      ["Mines swallowed", String(w.stats.absorbed)],
       ["Scrap banked", `+${record.score.toLocaleString()}`],
       ["Course reached", `${Math.round((Math.min(this.world.player.y, COURSE_LENGTH) / COURSE_LENGTH) * 100)}%`],
     ];
@@ -289,7 +377,9 @@ class Game {
     // The concrete next thing, named, with the gap. "Come back tomorrow" is not a reason to
     // return; "1,400 more and the coil gets wider" is.
     const goal = nextGoal(this.save);
-    el("result-goal").innerHTML = goal
+    el("result-goal").innerHTML = completed.length
+      ? `<b>Contract complete.</b><br>${completed.join("<br>")}`
+      : goal
       ? goal.remaining === 0
         ? `<b>${goal.label}.</b> Spend it in the workshop.`
         : `<b>${goal.remaining.toLocaleString()} more scrap</b> unlocks ${goal.label}.`

@@ -176,6 +176,107 @@ export const EDITIONS: Edition[] = [
   },
 ];
 
+/**
+ * One course per calendar day, identical for everyone. Determinism was built into the course
+ * generator from the first commit precisely so this would be free later: no server, no level
+ * data to distribute, just a date turned into a seed.
+ */
+export function dailyCode(now: Date = new Date()): string {
+  const y = now.getUTCFullYear();
+  const m = String(now.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(now.getUTCDate()).padStart(2, "0");
+  return `DAILY-${y}${m}${d}`;
+}
+
+export interface RunSummary {
+  score: number;
+  won: boolean;
+  absorbed: number;
+  collected: number;
+  maxCombo: number;
+  hits: number;
+}
+
+/**
+ * Contracts exist to make a player try something other than their default line. Each one asks
+ * for a specific behaviour, and the reward is paid in the same scrap the shop spends, so they
+ * feed the loop that already exists rather than adding a second currency to reason about.
+ */
+export interface ContractDef {
+  id: string;
+  text: string;
+  target: number;
+  reward: number;
+  /** How much this run advanced the contract. */
+  measure(r: RunSummary): number;
+}
+
+export const CONTRACTS: ContractDef[] = [
+  {
+    id: "swallow",
+    text: "Swallow mines in your own colour",
+    target: 30,
+    reward: 3500,
+    measure: (r) => r.absorbed,
+  },
+  {
+    id: "haul",
+    text: "Bank scrap",
+    target: 40000,
+    reward: 4000,
+    measure: (r) => r.score,
+  },
+  {
+    id: "finish",
+    text: "Reach the end of a course",
+    target: 3,
+    reward: 3000,
+    measure: (r) => (r.won ? 1 : 0),
+  },
+  {
+    id: "flawless",
+    text: "Finish a course without losing a cell",
+    target: 1,
+    reward: 5000,
+    measure: (r) => (r.won && r.hits === 0 ? 1 : 0),
+  },
+  {
+    id: "chain",
+    text: "Hold a chain of 60 in one run",
+    target: 1,
+    reward: 3500,
+    measure: (r) => (r.maxCombo >= 60 ? 1 : 0),
+  },
+  {
+    id: "pickup",
+    text: "Pull in 140 pieces in one run",
+    target: 1,
+    reward: 3000,
+    measure: (r) => (r.collected >= 140 ? 1 : 0),
+  },
+];
+
+export interface ActiveContract {
+  id: string;
+  progress: number;
+}
+
+export function contractById(id: string): ContractDef | undefined {
+  return CONTRACTS.find((c) => c.id === id);
+}
+
+/** Fill empty slots with contracts that are not already active. */
+export function refillContracts(active: ActiveContract[]): ActiveContract[] {
+  const out = active.filter((a) => contractById(a.id));
+  const taken = new Set(out.map((a) => a.id));
+  const pool = CONTRACTS.filter((c) => !taken.has(c.id));
+  while (out.length < 3 && pool.length > 0) {
+    const pick = pool.splice(Math.floor(Math.random() * pool.length), 1)[0]!;
+    out.push({ id: pick.id, progress: 0 });
+  }
+  return out;
+}
+
 export interface SaveData {
   scrap: number;
   lifetimeScrap: number;
@@ -183,6 +284,9 @@ export interface SaveData {
   ownedEditions: string[];
   edition: string;
   runs: number;
+  dailyDate: string;
+  dailyBest: number;
+  contracts: ActiveContract[];
 }
 
 function emptySave(): SaveData {
@@ -193,6 +297,9 @@ function emptySave(): SaveData {
     ownedEditions: ["federal"],
     edition: "federal",
     runs: 0,
+    dailyDate: "",
+    dailyBest: 0,
+    contracts: refillContracts([]),
   };
 }
 
@@ -210,6 +317,9 @@ export function loadSave(): SaveData {
       ownedEditions: Array.from(new Set([...(parsed.ownedEditions ?? []), "federal"])),
       edition: parsed.edition ?? "federal",
       runs: Number(parsed.runs) || 0,
+      dailyDate: parsed.dailyDate ?? "",
+      dailyBest: Number(parsed.dailyBest) || 0,
+      contracts: refillContracts(parsed.contracts ?? []),
     };
   } catch {
     return emptySave();
@@ -253,6 +363,15 @@ export function nextGoal(save: SaveData): { label: string; remaining: number } |
     if (remaining <= 0) return { label: `${def.name} ${level + 1} is affordable now`, remaining: 0 };
     if (!best || remaining < best.remaining) {
       best = { label: `${def.name} ${level + 1}`, remaining };
+    }
+  }
+
+  for (const c of save.contracts) {
+    const def = contractById(c.id);
+    if (!def) continue;
+    const left = def.target - c.progress;
+    if (left > 0 && left <= def.target * 0.34) {
+      return { label: `a contract: ${def.text.toLowerCase()}`, remaining: 0 };
     }
   }
 

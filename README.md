@@ -1,8 +1,25 @@
 # Magnet Metro
 
-A one-thumb arcade salvage game for iOS and Android. This repository currently holds the
-**mechanic test**: two candidate control schemes running on one shared game, so the core
-interaction can be chosen on evidence before any of the metagame gets built.
+A one-thumb arcade game for iOS and Android.
+
+## What the game is about
+
+> **The same object is either food or death, depending on who you are right now.**
+
+A wall of red mines is a meal if you are red and a catastrophe if you are blue, and you decide
+which by tapping. You are not dodging the world — you are becoming the thing that can eat it.
+
+That thesis was not in the original design document; it emerged from fixing the colour system,
+and it is what makes the game distinctive. The document's "salvage drone rebuilds a ruined
+city" premise is vestigial and has been dropped: it was a theme bolted onto a mechanic that
+turned out to be about something else.
+
+**The player's goal is to get enormous.** The tail is not decoration — it is the visible
+embodiment of everything swallowed, and it is what a clip of this game shows. Since organic
+distribution is the whole strategy at this budget, the thing that grows has to be the thing
+you see.
+
+Everything below serves that thesis. Anything that does not is a candidate for cutting.
 
 ## Running it
 
@@ -104,6 +121,29 @@ The naive clear rate is the number to watch. The genre wants roughly 80% of play
 their first run, and the bots are nowhere near that. Some of that gap is the bot being far
 worse than a person, but not all of it, and the honest next step is human play rather than
 another round of tuning against a robot.
+
+## The Press
+
+Every course ends against a solid wall of one colour, four rows deep with no gap, telegraphed
+about three seconds ahead. Match it and you swallow the entire structure — by far the biggest
+payoff in the game, and the five seconds anyone would actually clip. Get it wrong and it costs
+you nearly half of everything you were carrying.
+
+Crucially it **gambles the haul, never the run**. The first version cost lives and dropped
+naive first-run completion from 50% to zero. Rebuilt to cost only the chain, it *raised* it to
+75% while lifting skilled scores from 18,700 to 24,500 — beginners always reach the ending,
+experts get an enormous swing. A course that simply stops at a distance marker has no shape;
+this gives every run a climax.
+
+## Coming back tomorrow
+
+**Today's Run** is one course per calendar day, identical for everyone, seeded from the UTC
+date. Determinism was built into the course generator from the first commit precisely so this
+would cost nothing later: no server, no level data to distribute.
+
+**Contracts** are three rotating objectives that ask for a specific behaviour — swallow thirty
+mines, finish without losing a cell, hold a chain of sixty. They pay in the same scrap the
+shop spends, so they feed the existing loop rather than introducing a second currency.
 
 ## Progression: workshop, upgrades, editions
 
