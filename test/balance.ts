@@ -66,12 +66,14 @@ function bestTargetX(world: World, wantPolarity: Polarity): number | null {
 }
 
 /** Nudge a desired position away from anything lethal sitting in front of it. */
-function avoidHazards(world: World, desiredX: number): number {
+function avoidHazards(world: World, desiredX: number, wantPolarity: Polarity): number {
   const p = world.player;
   let x = desiredX;
   for (const h of world.hazards) {
     const dy = h.y - p.y;
     if (dy < -1 || dy > 20) continue;
+    // A hazard in the player's colour is a pickup, so steering around it would be a mistake.
+    if (world.options.charged && wantPolarity !== 0 && h.polarity === wantPolarity) continue;
     const clearance = h.r + p.r + 2.5;
     if (Math.abs(h.x - x) < clearance) {
       x = h.x + (x >= h.x ? clearance : -clearance);
@@ -93,13 +95,14 @@ function preferredPolarity(world: World): Polarity {
     if (s.polarity === 1) blue += weight;
     else if (s.polarity === -1) red += weight;
   }
-  // A same-charge hazard bearing down outweighs any pickup: flip away from it.
+  // Matching a nearby hazard is worth more than matching scrap: it scores and it removes
+  // something that would otherwise have cost a life.
   for (const h of world.hazards) {
     const dy = h.y - p.y;
-    if (dy < 0 || dy > 16) continue;
-    if (Math.abs(h.x - p.x) > 12) continue;
-    if (h.polarity === 1) blue -= 6;
-    else if (h.polarity === -1) red -= 6;
+    if (dy < 0 || dy > 26) continue;
+    if (Math.abs(h.x - p.x) > 14) continue;
+    if (h.polarity === 1) blue += 9;
+    else if (h.polarity === -1) red += 9;
   }
   if (blue === 0 && red === 0) return 0;
   return blue >= red ? 1 : -1;
@@ -118,7 +121,7 @@ function greedyBot(world: World, mechanic: Mechanic, bot: BotState): InputState 
       bot.tapCooldown = 8;
     }
     const target = bestTargetX(world, bot.polarity) ?? p.x;
-    const desired = avoidHazards(world, target);
+    const desired = avoidHazards(world, target, bot.polarity);
     input.dragDx = Math.max(-MAX_THUMB_STEP, Math.min(MAX_THUMB_STEP, desired - p.x));
     return input;
   }
@@ -142,7 +145,7 @@ function greedyBot(world: World, mechanic: Mechanic, bot: BotState): InputState 
 
   // Overload: charge in the clear, dump the pulse into a cluster or at an incoming hazard.
   const target = bestTargetX(world, 0) ?? p.x;
-  const desired = avoidHazards(world, target);
+  const desired = avoidHazards(world, target, 0);
   input.dragDx = Math.max(-MAX_THUMB_STEP, Math.min(MAX_THUMB_STEP, desired - p.x));
 
   let dangerClose = false;

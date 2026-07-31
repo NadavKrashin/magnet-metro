@@ -22,7 +22,7 @@ export class PolarityMechanic implements Mechanic {
   readonly name = "Switch";
   // Deliberately not phrased as magnetism. Real magnets attract their opposite, so calling
   // this "polarity" primed players with a rule that is the reverse of what the game does.
-  readonly pitch = "You collect your own colour. Tap to change colour.";
+  readonly pitch = "Your colour feeds you. The other colour hurts. Tap to change.";
   readonly worldOptions = { anchors: false, charged: true };
 
   private polarity: Polarity = 1;
@@ -67,21 +67,28 @@ export class PolarityMechanic implements Mechanic {
     const y = world.player.y;
     world.promptUrgent = false;
 
+    // Keyed off the current colour rather than off what the player has done before, so every
+    // prompt stays correct for someone who taps early, taps back, or taps at random.
     if (y < 70) {
-      world.prompt = "YOUR COLOUR FLIES TO YOU";
-    } else if (y < OPENING_LENGTH * 0.72) {
-      // Keyed off the current charge, not off whether a tap ever happened, so the prompt is
-      // still correct for a player who flips early or flips back.
+      world.prompt = "YOUR COLOUR COMES TO YOU";
+    } else if (y < 150) {
       if (this.polarity === -1) {
         world.prompt = "NOW THEY COME TO YOU";
       } else {
         // The player is staring at a wall of the other colour that will not budge. This is
         // the moment the tap has to be explained, and not a second earlier.
-        world.prompt = "TAP TO BECOME RED";
+        world.prompt = "RED WON'T COME — TAP TO BECOME RED";
+        world.promptUrgent = true;
+      }
+    } else if (y < 235) {
+      if (this.polarity === -1) {
+        world.prompt = "RED MINES — EAT THEM";
+      } else {
+        world.prompt = "TAP! MATCH THE MINES TO EAT THEM";
         world.promptUrgent = true;
       }
     } else if (y < OPENING_LENGTH) {
-      world.prompt = "BOTH COLOURS — PICK ONE";
+      world.prompt = "YOUR COLOUR FEEDS YOU · THE OTHER HURTS";
     } else {
       world.prompt = "";
     }

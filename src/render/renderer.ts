@@ -212,41 +212,55 @@ export class Renderer implements View {
   }
 
   private drawHazards(ctx: CanvasRenderingContext2D, world: World): void {
+    const fieldPol = world.field.polarity;
     for (const h of world.hazards) {
       const x = this.toScreenX(h.x);
       const y = this.toScreenY(h.y);
       if (y < -60 || y > this.ch + 60) continue;
       const r = h.r * this.scale;
-      // Charged hazards are tinted by their charge so the player can plan the flip early.
       const tint = h.polarity === 1 ? COLOR_BLUE : h.polarity === -1 ? COLOR_RED : "#ff8a4d";
+      // A hazard in your colour is food, not a threat, and it must never look like the thing
+      // that kills you. Spikes appear only on what can actually hurt.
+      const edible =
+        world.options.charged && fieldPol !== 0 && h.polarity === fieldPol;
+
+      if (edible) {
+        // Filled, glowing and smooth: the same visual family as collectable scrap.
+        this.glow(ctx, x, y, r * 2.6, tint, 0.26);
+        ctx.fillStyle = tint;
+        traceChargeShape(ctx, x, y, r * 0.92, h.polarity);
+        ctx.fill();
+        ctx.fillStyle = "rgba(255,255,255,0.55)";
+        traceChargeShape(ctx, x, y, r * 0.34, h.polarity);
+        ctx.fill();
+        continue;
+      }
 
       this.glow(ctx, x, y, r * 2.0, tint, 0.16);
+      ctx.fillStyle = "#1d2942";
+      ctx.lineWidth = Math.max(1.5, this.scale * 0.2);
+      ctx.strokeStyle = tint;
 
       if (h.kind === "block") {
-        ctx.fillStyle = "#1d2942";
         ctx.beginPath();
         ctx.roundRect(x - r, y - r * 0.72, r * 2, r * 1.44, r * 0.3);
         ctx.fill();
-        ctx.strokeStyle = tint;
-        ctx.lineWidth = Math.max(1.5, this.scale * 0.2);
         ctx.stroke();
       } else {
-        ctx.fillStyle = "#1d2942";
         ctx.beginPath();
         ctx.arc(x, y, r, 0, TAU);
         ctx.fill();
-        ctx.strokeStyle = tint;
-        ctx.lineWidth = Math.max(1.5, this.scale * 0.2);
-        ctx.stroke();
-        // Spikes read as "do not touch" at a glance, even at thumbnail size in an ad clip.
-        ctx.beginPath();
-        for (let i = 0; i < 6; i++) {
-          const a = (i / 6) * TAU;
-          ctx.moveTo(x + Math.cos(a) * r * 0.9, y + Math.sin(a) * r * 0.9);
-          ctx.lineTo(x + Math.cos(a) * r * 1.45, y + Math.sin(a) * r * 1.45);
-        }
         ctx.stroke();
       }
+
+      // Spikes read as "do not touch" at a glance, even at thumbnail size in an ad clip.
+      ctx.beginPath();
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * TAU;
+        ctx.moveTo(x + Math.cos(a) * r * 0.95, y + Math.sin(a) * r * 0.95);
+        ctx.lineTo(x + Math.cos(a) * r * 1.5, y + Math.sin(a) * r * 1.5);
+      }
+      ctx.stroke();
     }
   }
 

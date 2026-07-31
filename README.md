@@ -29,14 +29,36 @@ balance harness showed it barely responds to skill (+87% from a good bot, agains
 the others) and the first player could not tell what it wanted from them. Two independent
 signals agreeing was enough to stop spending time on it.
 
+## The colour rule
+
+> **Your colour comes to you and is good. The other colour stays away and hurts you.**
+
+One rule, and every object on screen obeys it:
+
+| | Your colour | The other colour |
+|---|---|---|
+| **Scrap** | pulled in, collected | pushed away, *cannot* be collected at all |
+| **Hazards** | pulled in, eaten for points | inert, and it costs you a life |
+
+The second row is what makes the mechanic worth playing. A wall of red mines is not an
+obstacle to thread — it is a meal, if you are red when you reach it. Walls therefore spawn in
+a single colour, because a mixed wall can only ever be dodged and would collapse the decision
+back into "find the gap".
+
+An earlier version had colour affect only the *strength of the magnetic pull*, with nothing
+gated on it: you could barge into any colour and collect it, and every hazard hurt regardless.
+Colour was decorative, and the first player said so immediately.
+
 ## How the rules are taught
 
 The first ~210 units of every course are a scripted, hazard-free lesson. Nothing can kill the
 player until it is over, so the only thing available to learn is the rule.
 
-For Switch, it runs in three beats: your own colour flies to you; then a wall of the other
-colour that steering cannot solve, which is the moment the tap is introduced; then both
-colours at once, which turns the tap into a choice.
+For Switch it runs in four beats: your own colour comes to you; then a wall of the other
+colour that steering cannot solve, which is the moment the tap is introduced; then a field of
+red mines encountered while the player is *already* red, so their first meeting with a hazard
+is one they eat; then both colours at once, which turns the tap into a choice. The mine field
+still has a gap, so a player who has not understood yet survives anyway.
 
 Three rules make this legible, and they were all corrections after the first play test:
 
@@ -57,11 +79,16 @@ calling it polarity primed players with a rule that is the reverse of what the g
 From `npm run balance` — two bots across 12 seeds. The naive bot sweeps blindly and ignores
 hazards; the skilled bot targets scrap and dodges. The gap between them is skill expression.
 
-| Mechanic | Naive clear | Skilled clear | Skilled pickup | Skill lift |
+| Mechanic | Naive clear | Skilled clear | Skilled hits | Skill lift |
 |---|---|---|---|---|
-| Switch | 8% | 100% | 51% | +1468% |
-| Overload | 8% | 100% | 67% | +1408% |
-| Tether *(parked)* | 17% | 33% | 23% | +60% |
+| Switch | 50% | 100% | 0.0 | +1187% |
+| Overload | 33% | 92% | 0.8 | +1193% |
+| Tether *(parked)* | 42% | 33% | 2.6 | +47% |
+
+Naive clear rate jumped from 8% to 50% for Switch when colour became a real rule, because a
+blindly tapping player now eats walls by accident about half the time. That is the mechanic
+being forgiving to a beginner and generous to an expert at the same time, which is the shape
+this genre needs.
 
 Read these as directional, not final. The naive bot is worse than a real first-time player
 because it never avoids anything, so true first-run completion sits somewhere above these

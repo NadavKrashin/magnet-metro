@@ -30,10 +30,10 @@ const COMBO_PER_STEP = 8;
 const COMBO_MAX_MULT = 8;
 /** Radians per second for patrolling hazards. */
 const DRIFT_SPEED = 1.4;
-/** Wrong-polarity hazards are only dragged in from this fraction of the field radius. */
-const HAZARD_PULL_RADIUS_FACTOR = 0.6;
-/** Course distance given over to the scripted, hazard-free teaching sequence. */
-export const OPENING_LENGTH = 210;
+/** Course distance given over to the scripted teaching sequence. */
+export const OPENING_LENGTH = 290;
+/** Absorbing a matching hazard is worth this much before the combo multiplier. */
+const HAZARD_ABSORB_VALUE = 4;
 
 export interface WorldOptions {
   /** Spawn tether anchors. Only the tether mechanic uses them. */
@@ -185,8 +185,31 @@ export class World {
       s.vx *= 0.93;
       s.vy *= 0.93;
 
-      if (circlesHit(p.x, p.y, p.r + 0.6, s.x, s.y, s.r)) this.collect(s);
+      if (!circlesHit(p.x, p.y, p.r + 0.6, s.x, s.y, s.r)) continue;
+
+      // Colour is a rule, not a hint. Touching the wrong colour must not collect it, or the
+      // colour carries no meaning and the player can simply barge through everything.
+      if (this.matchesField(s.polarity)) {
+        this.collect(s);
+      } else {
+        this.deflect(s);
+      }
     }
+  }
+
+  /** True when an object of this colour is attracted to, and usable by, the player. */
+  private matchesField(polarity: Polarity): boolean {
+    return this.field.polarity === 0 || polarity === 0 || polarity === this.field.polarity;
+  }
+
+  /** Shove a wrong-colour item clear so it cannot sit inside the drone looking collectable. */
+  private deflect(s: Scrap): void {
+    const p = this.player;
+    const dx = s.x - p.x;
+    const dy = s.y - p.y;
+    const d = Math.sqrt(dx * dx + dy * dy) || 1;
+    s.vx = (dx / d) * 34;
+    s.vy = (dy / d) * 34;
   }
 
   private updateHazards(dt: number): void {
@@ -200,6 +223,10 @@ export class World {
         h.x += Math.cos(this.elapsed * DRIFT_SPEED + h.driftPhase) * h.driftAmp * DRIFT_SPEED * dt;
       }
 
+      // A hazard wearing the player's colour is not a threat, it is fuel. It gets pulled in
+      // exactly like scrap does, which is what makes one rule cover everything on screen.
+      const absorbable = this.options.charged && f.polarity !== 0 && h.polarity === f.polarity;
+
       if (f.repelHazards) {
         const dx = h.x - p.x;
         const dy = h.y - p.y;
@@ -209,19 +236,12 @@ export class World {
           h.vx += (dx / d) * push * dt;
           h.vy += (dy / d) * push * dt;
         }
-      } else if (this.options.charged && f.polarity !== 0 && h.polarity === f.polarity) {
-        // Same charge as the magnet: the hazard is dragged toward the player. This is the
-        // punishment for holding the wrong polarity, and it reads clearly on screen.
-        //
-        // The punish radius is deliberately smaller than the collection radius. Widening the
-        // field to make collecting feel good must not silently widen the danger zone by the
-        // same amount, or every buff to game feel becomes a difficulty spike.
-        const danger = f.radius * HAZARD_PULL_RADIUS_FACTOR;
+      } else if (absorbable) {
         const dx = p.x - h.x;
         const dy = p.y - h.y;
         const d = Math.sqrt(dx * dx + dy * dy);
-        if (d < danger && d > 0.0001) {
-          const pull = f.strength * 0.5 * (1 - d / danger);
+        if (d < f.radius && d > 0.0001) {
+          const pull = f.strength * 0.6 * (1 - d / f.radius);
           h.vx += (dx / d) * pull * dt;
           h.vy += (dy / d) * pull * dt;
         }
@@ -234,11 +254,11 @@ export class World {
       // Only stop them leaving the world entirely; a shoved hazard should stay shoved.
       h.x = clamp(h.x, -TRACK_HALF - 10, TRACK_HALF + 10);
 
-      if (
-        this.invulnTimer <= 0 &&
-        !f.invulnerable &&
-        circlesHit(p.x, p.y, p.r, h.x, h.y, h.r)
-      ) {
+      if (h.absorbed || !circlesHit(p.x, p.y, p.r, h.x, h.y, h.r)) continue;
+
+      if (absorbable) {
+        this.absorbHazard(h);
+      } else if (this.invulnTimer <= 0 && !f.invulnerable) {
         this.takeHit(h);
       }
     }
@@ -261,6 +281,26 @@ export class World {
     const color = s.polarity === -1 ? "#ff5d6c" : s.polarity === 1 ? "#5cc8ff" : "#9fb4cc";
     this.burst(s.x, s.y, s.value >= 5 ? 14 : 6, color);
     if (s.value >= 5) this.float(s.x, s.y, `+${gained}`, color);
+  }
+
+  /**
+   * Swallowing a matching hazard is the payoff that makes changing colour worth doing. It is
+   * worth more than a piece of scrap because it also removes something that would otherwise
+   * have cost the player a life.
+   */
+  private absorbHazard(h: Hazard): void {
+    h.absorbed = true;
+    this.combo += 1;
+    if (this.combo > this.stats.maxCombo) this.stats.maxCombo = this.combo;
+
+    const gained = HAZARD_ABSORB_VALUE * this.multiplier;
+    this.score += gained;
+    this.collectPulse = 1;
+    this.shake = Math.min(this.shake + 0.35, 2);
+
+    const color = h.polarity === -1 ? "#ff5d6c" : "#5cc8ff";
+    this.burst(h.x, h.y, 18, color);
+    this.float(h.x, h.y, `+${gained}`, color);
   }
 
   private takeHit(h: Hazard): void {
@@ -323,7 +363,7 @@ export class World {
       }
       return true;
     });
-    this.hazards = this.hazards.filter((h) => h.y > behind);
+    this.hazards = this.hazards.filter((h) => !h.absorbed && h.y > behind);
     this.anchors = this.anchors.filter((a) => a.y > behind);
   }
 
@@ -462,7 +502,20 @@ export class World {
       return 80;
     }
 
-    // Lesson 3 — both colours present, so the tap becomes a choice rather than a reflex.
+    // Lesson 3 — a wall of red hazards. The player is already red from lesson 2, so their
+    // first encounter with a hazard is one they eat. Learning "my colour is safe" by doing it
+    // is worth more than any amount of on-screen text, and the gap means a player who has not
+    // understood yet still survives.
+    if (y < 235) {
+      for (let i = 0; i < 7; i++) {
+        const x = -TRACK_HALF + 3 + (i / 6) * (TRACK_HALF * 2 - 6);
+        if (Math.abs(x - 14) < 7) continue;
+        this.addHazard(x, y + 14, "mine", -1, 0);
+      }
+      return 85;
+    }
+
+    // Lesson 4 — both colours at once, so the tap becomes a choice rather than a reflex.
     this.scrapLine(y, -13, 1, 6);
     this.scrapLine(y, 13, -1, 6);
     return 60;
@@ -515,10 +568,14 @@ export class World {
     const gapCenter = this.rng.range(-18, 18);
     const gapWidth = 15 - hard * 3;
     const count = 7;
+    // One colour for the whole wall. A mixed wall can never be ploughed through, so the
+    // "match it and eat the entire thing" moment — the best thing this mechanic does — would
+    // never happen and every wall would collapse back into "find the gap".
+    const wallPol = this.randomCharge();
     for (let i = 0; i < count; i++) {
       const x = -TRACK_HALF + 2 + (i / (count - 1)) * (TRACK_HALF * 2 - 4);
       if (Math.abs(x - gapCenter) < gapWidth) continue;
-      this.addHazard(x, y, "block", this.randomCharge(), 0);
+      this.addHazard(x, y, "block", wallPol, 0);
     }
     this.scrapArc(y + 16, gapCenter, 6, this.randomCharge(), 10);
   }
@@ -563,12 +620,13 @@ export class World {
 
   private minefield(y: number, hard: number): void {
     const n = 2 + Math.floor(hard * 3);
+    const fieldPol = this.randomCharge();
     for (let i = 0; i < n; i++) {
       this.addHazard(
         this.rng.range(-TRACK_HALF + 3, TRACK_HALF - 3),
         y + this.rng.range(0, 34),
         "mine",
-        this.randomCharge(),
+        fieldPol,
         this.rng.chance(0.4) ? 9 : 0,
       );
     }
@@ -611,6 +669,7 @@ export class World {
       kind,
       driftAmp: drift,
       driftPhase: this.rng.range(0, Math.PI * 2),
+      absorbed: false,
     });
   }
 }

@@ -26,6 +26,8 @@ export interface Hazard {
   /** Patrol amplitude in world units. Zero for stationary hazards. */
   driftAmp: number;
   driftPhase: number;
+  /** Set when swallowed by a matching-colour drone, so it can be cleared next cull. */
+  absorbed: boolean;
 }
 
 export interface Anchor {
