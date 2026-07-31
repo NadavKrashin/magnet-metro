@@ -717,6 +717,17 @@ button.daily {
   background: var(--blue);
 }
 
+/* An offer, never a demand: it sits apart from the primary action and can be ignored. */
+button.double {
+  background: var(--blue);
+  color: var(--paper);
+  font-size: 17px;
+}
+
+button.double[disabled] {
+  display: none;
+}
+
 /* ---------- Accessibility ---------- */
 
 :focus-visible {

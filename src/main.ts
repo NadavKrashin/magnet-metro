@@ -22,6 +22,9 @@ import {
   type SaveData,
 } from "./game/progression";
 import { applyEdition } from "./render/palette";
+import { Analytics, DebugSink } from "./analytics/analytics";
+import { AdsService } from "./ads/ads";
+import { REWARD } from "./ads/config";
 import type { Mechanic } from "./mechanics/types";
 import { PolarityMechanic } from "./mechanics/polarity";
 import { OverloadMechanic } from "./mechanics/overload";
@@ -67,12 +70,18 @@ function saveRuns(runs: RunRecord[]): void {
   }
 }
 
-type State = "menu" | "playing" | "results" | "shop";
+type State = "menu" | "playing" | "results" | "shop" | "revive";
 
 class Game {
   private renderer: Renderer;
   private input = new Input();
   private audio = new GameAudio();
+  private analytics = new Analytics();
+  private ads = new AdsService(this.analytics);
+  /** One rewarded continue per run, and one bonus per result. */
+  private revivedThisRun = false;
+  /** Score of the run whose results are on screen, for the bonus and the share text. */
+  private lastRunScore = 0;
   private loop: Loop;
   // Tether is parked, not deleted. The balance harness showed it barely responds to skill
   // (+87% from a good bot against +1000% for the others) and the first player could not tell
@@ -101,6 +110,7 @@ class Game {
   private seedInput = el<HTMLInputElement>("seed-input");
   private muteEl = el<HTMLButtonElement>("mute");
   private shopEl = el("shop");
+  private reviveEl = el("revive");
 
   constructor() {
     const canvas = el<HTMLCanvasElement>("game");
@@ -144,6 +154,17 @@ class Game {
     // Paper grain is a static overlay, so the browser's compositor can blend it once rather
     // than the canvas re-filling a full-screen multiply pattern sixty times a second.
     el("grain").style.backgroundImage = `url(${makeGrainTile().toDataURL()})`;
+
+    el("btn-revive").addEventListener("click", () => void this.watchToRevive());
+    el("btn-give-up").addEventListener("click", () => this.endRun());
+    el("btn-double").addEventListener("click", () => void this.watchToDouble());
+    el("btn-share").addEventListener("click", () => void this.shareRun());
+    el("btn-privacy").addEventListener("click", () => void this.ads.showPrivacyOptions());
+
+    this.analytics.addSink(new DebugSink());
+    this.analytics.start();
+    // Consent, tracking permission and SDK start-up all happen in here, in that order.
+    void this.ads.init();
 
     window.addEventListener("resize", this.onResize);
     this.onResize();
@@ -263,6 +284,14 @@ class Game {
     this.input.reset();
     this.state = "playing";
 
+    this.revivedThisRun = false;
+    this.analytics.noteRunStarted();
+    this.analytics.track("run_start", {
+      mechanic: this.active.id,
+      seed: this.seedCode,
+      daily: this.isDaily,
+    });
+
     this.audio.unlock();
     this.audio.setIntensity(0);
     this.audio.startMusic();
@@ -276,6 +305,76 @@ class Game {
     this.menuEl.classList.add("hidden");
     this.resultsEl.classList.add("hidden");
     this.hud.classList.remove("hidden");
+  }
+
+  /** A continue is only worth offering on a real loss, deep enough in, once per run. */
+  private shouldOfferRevive(): boolean {
+    return (
+      this.world.phase === "lost" &&
+      !this.revivedThisRun &&
+      this.world.progress >= REWARD.reviveMinProgress &&
+      this.ads.rewardedReady
+    );
+  }
+
+  private offerRevive(): void {
+    this.state = "revive";
+    this.audio.stopMusic();
+    el("revive-score").textContent = this.world.score.toLocaleString();
+    el("revive-note").textContent = `You are ${Math.round(this.world.progress * 100)}% through. Watch a short ad to carry on with the ${this.world.chain.length} pieces you are holding.`;
+    this.hud.classList.add("hidden");
+    this.reviveEl.classList.remove("hidden");
+    this.analytics.track("rewarded_offered", { placement: "revive" });
+  }
+
+  private async watchToRevive(): Promise<void> {
+    const earned = await this.ads.showRewarded("revive");
+    if (!earned) {
+      this.endRun();
+      return;
+    }
+    this.revivedThisRun = true;
+    this.world.revive(2);
+    this.state = "playing";
+    this.reviveEl.classList.add("hidden");
+    this.hud.classList.remove("hidden");
+    this.buildIntegrity();
+    this.input.reset();
+    this.audio.startMusic();
+  }
+
+  /** Offered after the score is already banked, so it adds rather than withholds. */
+  private async watchToDouble(): Promise<void> {
+    const earned = await this.ads.showRewarded("double_scrap");
+    if (!earned) return;
+    const bonus = this.lastRunScore * (REWARD.doubleScrapMultiplier - 1);
+    this.save.scrap += bonus;
+    saveSave(this.save);
+    this.analytics.track("currency_earned", { amount: bonus, source: "rewarded_double" });
+    el<HTMLButtonElement>("btn-double").disabled = true;
+    el("result-goal").innerHTML = `<b>+${bonus.toLocaleString()} scrap</b> added. Banked: ${this.save.scrap.toLocaleString()}.`;
+    this.audio.unlock();
+    this.audio.absorb();
+  }
+
+  /**
+   * Sharing is the growth strategy, not a nicety: paid acquisition does not add up at this
+   * budget, so the run has to be able to leave the phone. The course code makes it a
+   * challenge rather than a boast — the recipient can play the exact same course.
+   */
+  private async shareRun(): Promise<void> {
+    const text = `I hauled ${this.lastRunScore.toLocaleString()} out of Magnet Metro on course ${this.seedCode}. Beat it.`;
+    this.analytics.track("share_opened", { score: this.lastRunScore, seed: this.seedCode });
+    try {
+      if (navigator.share) {
+        await navigator.share({ text });
+        return;
+      }
+      await navigator.clipboard.writeText(text);
+      el<HTMLButtonElement>("btn-share").textContent = "Copied";
+    } catch {
+      // Dismissed the sheet, or no clipboard permission. Nothing to recover from.
+    }
   }
 
   private showMenu(): void {
@@ -299,6 +398,8 @@ class Game {
   private endRun(): void {
     this.state = "results";
     const w = this.world;
+    this.lastRunScore = w.score;
+    this.reviveEl.classList.add("hidden");
     this.audio.stopMusic();
     this.audio.finish(w.phase === "won");
     const record: RunRecord = {
@@ -387,8 +488,31 @@ class Game {
 
     el("compare").innerHTML = this.comparisonTable();
 
+    const doubleBtn = el<HTMLButtonElement>("btn-double");
+    doubleBtn.disabled = !this.ads.rewardedReady || record.score <= 0;
+    if (!doubleBtn.disabled) {
+      this.analytics.track("rewarded_offered", { placement: "double_scrap" });
+    }
+    el<HTMLButtonElement>("btn-share").textContent = "Share run";
+
+    this.analytics.track("run_end", {
+      mechanic: this.active.id,
+      won: record.won,
+      score: record.score,
+      absorbed: w.stats.absorbed,
+      hits: record.hits,
+      duration: Math.round(record.duration),
+      daily: this.isDaily,
+    });
+    this.analytics.track("currency_earned", { amount: record.score, source: "run" });
+    for (const done of completed) this.analytics.track("contract_completed", { detail: done });
+
     this.hud.classList.add("hidden");
     this.resultsEl.classList.remove("hidden");
+
+    // Only once the results are already on screen, and only if pacing allows. Never between a
+    // tap and the thing the tap was for.
+    void this.ads.maybeShowInterstitial(this.save.runs);
   }
 
   // -------------------------------------------------------------------------
@@ -401,6 +525,7 @@ class Game {
     this.resultsEl.classList.add("hidden");
     this.hud.classList.add("hidden");
     this.shopEl.classList.remove("hidden");
+    el("btn-privacy").classList.toggle("hidden", !this.ads.canShowPrivacyOptions);
     this.renderShop();
   }
 
@@ -449,6 +574,8 @@ class Game {
         this.save.scrap -= cost;
         this.save.upgrades[def.id] = level + 1;
         saveSave(this.save);
+        this.analytics.track("currency_spent", { amount: cost, sink: def.id });
+        this.analytics.track("upgrade_bought", { id: def.id, level: level + 1 });
         this.audio.unlock();
         this.audio.absorb();
         this.renderShop();
@@ -489,6 +616,8 @@ class Game {
           if (this.save.scrap < ed.cost) return;
           this.save.scrap -= ed.cost;
           this.save.ownedEditions.push(ed.id);
+          this.analytics.track("currency_spent", { amount: ed.cost, sink: `edition_${ed.id}` });
+          this.analytics.track("edition_bought", { id: ed.id });
         }
         this.save.edition = ed.id;
         saveSave(this.save);
@@ -539,7 +668,10 @@ class Game {
     this.active.update(this.world, { ...raw, dragDx: raw.dragDx * worldPerPixel }, dt);
     this.world.step(dt);
 
-    if (this.world.phase !== "running") this.endRun();
+    if (this.world.phase !== "running") {
+      if (this.shouldOfferRevive()) this.offerRevive();
+      else this.endRun();
+    }
   };
 
   private render = (): void => {

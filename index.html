@@ -66,6 +66,18 @@
         </div>
       </div>
 
+      <div id="revive" class="screen hidden">
+        <div class="panel">
+          <h2>Drone down</h2>
+          <div class="score-big"><span id="revive-score">0</span></div>
+          <p class="sub" id="revive-note">Watch a short ad to carry on with what you were holding.</p>
+          <div class="buttons">
+            <button id="btn-revive" class="primary">Watch &amp; continue</button>
+          </div>
+          <button id="btn-give-up" class="wide quiet">End the run</button>
+        </div>
+      </div>
+
       <div id="shop" class="screen hidden">
         <div class="panel">
           <h2>Workshop</h2>
@@ -78,6 +90,7 @@
             <button id="tab-editions" class="tab">Editions</button>
           </div>
           <div id="shop-list" class="shop-list"></div>
+          <button id="btn-privacy" class="wide quiet hidden">Privacy choices</button>
           <button id="btn-shop-close" class="wide primary">Back</button>
         </div>
       </div>
@@ -91,11 +104,15 @@
             <tbody id="result-stats"></tbody>
           </table>
           <div id="result-goal" class="goal"></div>
+          <button id="btn-double" class="wide double">Double it — watch an ad</button>
           <div class="buttons">
             <button id="btn-retry" class="primary">Run again</button>
             <button id="btn-shop-2">Workshop</button>
           </div>
-          <button id="btn-menu" class="wide quiet">Change mechanic</button>
+          <div class="buttons">
+            <button id="btn-share" class="quiet">Share run</button>
+            <button id="btn-menu" class="quiet">Change mechanic</button>
+          </div>
           <div id="compare" class="compare"></div>
         </div>
       </div>

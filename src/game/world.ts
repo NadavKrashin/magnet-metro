@@ -149,6 +149,24 @@ export class World {
     return MAX_INTEGRITY + this.mods.extraLives;
   }
 
+  /**
+   * Bring a destroyed drone back mid-course, for the rewarded continue.
+   *
+   * The window ahead is cleared as well as the window behind: dropping the player back onto
+   * the exact wall that just killed them would make the reward worthless, and that is the
+   * kind of thing that earns one-star reviews rather than impressions.
+   */
+  revive(cells: number): void {
+    this.phase = "running";
+    this.integrity = cells;
+    this.invulnTimer = 2.2;
+    this.hitFlash = 0;
+    this.shake = 0;
+    this.combo = 0;
+    const y = this.player.y;
+    this.hazards = this.hazards.filter((h) => h.y < y - 6 || h.y > y + 34);
+  }
+
   setViewHeight(h: number): void {
     this.viewHeight = h;
   }

@@ -1,0 +1,111 @@
+/**
+ * Event taxonomy and a pluggable sink.
+ *
+ * Nothing here talks to a vendor. The point is that instrumentation exists from the start with
+ * stable names, so wiring Firebase, an MMP, or a self-hosted collector later is a matter of
+ * adding one sink rather than retrofitting call sites across the codebase.
+ *
+ * Two rules that matter more than they look:
+ *   - Never repurpose an existing event name. A renamed meaning silently corrupts every
+ *     historical comparison, and the corruption is invisible until a decision is made on it.
+ *   - Every ad event carries its placement, so revenue can be attributed to a spot in the game
+ *     rather than to a format in aggregate.
+ */
+
+export type EventName =
+  // Lifecycle
+  | "first_open"
+  | "session_start"
+  // Consent and privacy
+  | "consent_state_updated"
+  | "att_prompt"
+  | "privacy_options_opened"
+  // Run
+  | "run_start"
+  | "run_end"
+  | "press_result"
+  // Progression
+  | "currency_earned"
+  | "currency_spent"
+  | "upgrade_bought"
+  | "edition_bought"
+  | "contract_completed"
+  // Virality
+  | "share_opened"
+  // Ads
+  | "ads_ready"
+  | "ads_skipped"
+  | "ads_init_failed"
+  | "rewarded_offered"
+  | "rewarded_offer_accepted"
+  | "rewarded_completed"
+  | "rewarded_abandoned"
+  | "rewarded_unavailable"
+  | "rewarded_failed"
+  | "interstitial_eligible"
+  | "interstitial_failed"
+  | "ad_impression";
+
+export type EventProps = Record<string, string | number | boolean>;
+
+export interface AnalyticsSink {
+  send(name: EventName, props: EventProps): void;
+}
+
+/** Keeps the last N events in memory so a build can be inspected without a backend. */
+export class DebugSink implements AnalyticsSink {
+  readonly events: { at: number; name: EventName; props: EventProps }[] = [];
+
+  send(name: EventName, props: EventProps): void {
+    this.events.push({ at: Date.now(), name, props });
+    if (this.events.length > 500) this.events.shift();
+  }
+}
+
+const SESSION_KEY = "mm_session_v1";
+const FIRST_OPEN_KEY = "mm_first_open_v1";
+
+export class Analytics {
+  private sinks: AnalyticsSink[] = [];
+  /** Attached to every event, so a funnel can be reconstructed per session. */
+  private sessionId = Math.random().toString(36).slice(2, 10);
+  private sessionRuns = 0;
+
+  addSink(sink: AnalyticsSink): void {
+    this.sinks.push(sink);
+  }
+
+  /** Emit the lifecycle events every funnel is built on. */
+  start(): void {
+    let isFirst = false;
+    try {
+      isFirst = !localStorage.getItem(FIRST_OPEN_KEY);
+      if (isFirst) localStorage.setItem(FIRST_OPEN_KEY, String(Date.now()));
+      const count = Number(localStorage.getItem(SESSION_KEY) ?? 0) + 1;
+      localStorage.setItem(SESSION_KEY, String(count));
+      if (isFirst) this.track("first_open", {});
+      this.track("session_start", { sessionNumber: count });
+    } catch {
+      this.track("session_start", { sessionNumber: 0 });
+    }
+  }
+
+  noteRunStarted(): void {
+    this.sessionRuns += 1;
+  }
+
+  track(name: EventName, props: EventProps): void {
+    const enriched: EventProps = {
+      ...props,
+      sessionId: this.sessionId,
+      sessionRuns: this.sessionRuns,
+    };
+    for (const sink of this.sinks) {
+      try {
+        sink.send(name, enriched);
+      } catch {
+        // A broken sink must never break the game.
+      }
+    }
+  }
+}
