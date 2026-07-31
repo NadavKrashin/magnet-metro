@@ -48,7 +48,11 @@ nobody preferred.
 |---|---|
 | **Levels** | Twelve fixed courses, one named objective each, unlocked in order, paying scrap and print editions |
 | **Today's Run** | One course per calendar day, identical for everyone |
-| **Free run** | A random course, or any course code you type in |
+| **Free run** | A random course, no target |
+
+A friend's course code is entered behind a fold on the menu rather than sitting in a field of
+its own. It is a power feature — it exists so a shared run can be replayed exactly — and as a
+permanent input it read like something the player was required to fill in.
 
 Levels answer the question the endless run cannot: *what am I supposed to do next.* Objectives
 are single conditions on purpose — a compound goal is harder to show in a HUD than it is

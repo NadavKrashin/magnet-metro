@@ -41,14 +41,13 @@
         <div class="panel">
           <h1>Magnet Metro</h1>
           <p class="sub">
-            You are blue or red. Your colour flies into you and makes you bigger; the other
-            colour bounces off and hurts. One tap changes which you are. Sound on is strongly
-            recommended.
+            Your colour feeds you. The other colour hurts. One tap changes which you are.
           </p>
           <div class="bank">
             <span class="bank-label">Scrap banked</span>
             <span id="bank-value">0</span>
           </div>
+
           <button id="btn-levels" class="wide primary daily">
             <span>Levels</span>
             <span id="levels-note" class="daily-note"></span>
@@ -57,20 +56,32 @@
             <span>Today's Run</span>
             <span id="daily-note" class="daily-note"></span>
           </button>
-          <div id="mechanic-list" class="mechanics"></div>
+          <button id="btn-free" class="wide daily">
+            <span>Free Run</span>
+            <span class="daily-note">A fresh course, no target</span>
+          </button>
           <button id="btn-shop" class="wide">Workshop</button>
+
           <div class="contracts">
             <div class="section-label">Contracts</div>
             <div id="contract-list"></div>
           </div>
-          <label class="seed-row">
-            <span>Course code</span>
-            <input id="seed-input" type="text" autocomplete="off" spellcheck="false" />
-          </label>
-          <p class="foot">
-            The same code always builds the same course, so any two people can play the exact
-            same one and compare.
-          </p>
+
+          <div class="panel-row">
+            <button id="btn-sound" type="button">Sound on</button>
+            <button id="btn-code-toggle" type="button">Friend's code</button>
+          </div>
+          <div id="code-row" class="code-row hidden">
+            <input
+              id="seed-input"
+              type="text"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="ABCD-EFG"
+              aria-label="Course code"
+            />
+            <button id="btn-code-go" class="primary">Go</button>
+          </div>
         </div>
       </div>
 

@@ -71,7 +71,7 @@ await page.locator("#btn-levels-close").click();
 await page.waitForTimeout(250);
 
 // Start the first mechanic.
-await page.locator(".mech").first().click();
+await page.locator("#btn-free").click();
 await page.waitForTimeout(500);
 await page.screenshot({ path: join(outDir, "2-opening.png") });
 

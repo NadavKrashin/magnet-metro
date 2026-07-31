@@ -127,6 +127,7 @@ class Game {
   private resultsEl = el("results");
   private seedInput = el<HTMLInputElement>("seed-input");
   private muteEl = el<HTMLButtonElement>("mute");
+  private soundEl = el<HTMLButtonElement>("btn-sound");
   private shopEl = el("shop");
   private reviveEl = el("revive");
   private levelsEl = el("levels");
@@ -142,15 +143,16 @@ class Game {
 
     this.input.attach(canvas);
     this.buildIntegrity();
-    this.seedInput.value = this.seedCode;
 
     // Browsers will not start audio without a gesture, so every entry point unlocks it.
     canvas.addEventListener("pointerdown", () => this.audio.unlock(), { passive: true });
     this.applyMute(localStorage.getItem(MUTE_KEY) === "1");
-    this.muteEl.addEventListener("click", () => {
+    const toggleSound = () => {
       this.audio.unlock();
       this.applyMute(!this.audio.muted);
-    });
+    };
+    this.muteEl.addEventListener("click", toggleSound);
+    this.soundEl.addEventListener("click", toggleSound);
 
     el("btn-retry").addEventListener("click", () => this.startRun());
     el("btn-menu").addEventListener("click", () => {
@@ -162,8 +164,7 @@ class Game {
     });
     el("btn-daily").addEventListener("click", () => {
       this.seedCode = dailyCode();
-      this.seedInput.value = this.seedCode;
-      this.isDaily = true;
+        this.isDaily = true;
       this.levelIndex = -1;
       this.startRun();
     });
@@ -174,10 +175,28 @@ class Game {
     el("btn-shop-close").addEventListener("click", () => this.showMenu());
     el("tab-upgrades").addEventListener("click", () => this.setShopTab("upgrades"));
     el("tab-editions").addEventListener("click", () => this.setShopTab("editions"));
-    this.seedInput.addEventListener("change", () => {
+    el("btn-free").addEventListener("click", () => {
+      this.seedCode = randomCode(new Rng(Date.now() >>> 0));
+      this.isDaily = false;
+      this.levelIndex = -1;
+      this.startRun();
+    });
+
+    // The course code is a power feature — it exists so a shared run can be replayed exactly.
+    // On the main menu it read as a required field, so it now stays folded away until asked for.
+    el("btn-code-toggle").addEventListener("click", () => {
+      const row = el("code-row");
+      const opening = row.classList.contains("hidden");
+      row.classList.toggle("hidden", !opening);
+      if (opening) this.seedInput.focus();
+    });
+    el("btn-code-go").addEventListener("click", () => {
       const v = this.seedInput.value.trim().toUpperCase();
-      this.seedCode = v.length > 0 ? v : randomCode(new Rng(Date.now() >>> 0));
-      this.seedInput.value = this.seedCode;
+      if (v.length === 0) return;
+      this.seedCode = v;
+      this.isDaily = false;
+      this.levelIndex = -1;
+      this.startRun();
     });
 
     // Paper grain is a static overlay, so the browser's compositor can blend it once rather
@@ -215,6 +234,8 @@ class Game {
     this.audio.setMuted(muted);
     this.muteEl.textContent = muted ? "SOUND OFF" : "SOUND ON";
     this.muteEl.classList.toggle("off", muted);
+    this.soundEl.textContent = muted ? "Sound off" : "Sound on";
+    this.soundEl.classList.toggle("off", muted);
     try {
       localStorage.setItem(MUTE_KEY, muted ? "1" : "0");
     } catch {
@@ -228,27 +249,6 @@ class Game {
       const d = document.createElement("div");
       d.className = "cell";
       this.integrityEl.appendChild(d);
-    }
-  }
-
-  private buildMenu(): void {
-    const list = el("mechanic-list");
-    list.innerHTML = "";
-    for (const m of this.mechanics) {
-      const stats = this.summaryFor(m.id);
-      const btn = document.createElement("button");
-      btn.className = "mech";
-      btn.innerHTML =
-        `<div class="mech-name">${m.name}</div>` +
-        `<div class="mech-pitch">${m.pitch}</div>` +
-        (stats ? `<div class="mech-best">${stats}</div>` : "");
-      btn.addEventListener("click", () => {
-        this.active = m;
-        this.isDaily = false;
-        this.levelIndex = -1;
-        this.startRun();
-      });
-      list.appendChild(btn);
     }
   }
 
@@ -297,14 +297,6 @@ class Game {
       );
     }
     return completed;
-  }
-
-  private summaryFor(id: string): string {
-    const rs = this.runs.filter((r) => r.mechanic === id);
-    if (rs.length === 0) return "";
-    const best = Math.max(...rs.map((r) => r.score));
-    const avg = Math.round(rs.reduce((a, r) => a + r.score, 0) / rs.length);
-    return `${rs.length} run${rs.length === 1 ? "" : "s"} · best ${best} · avg ${avg}`;
   }
 
   private startRun(): void {
@@ -453,7 +445,8 @@ class Game {
   private showMenu(): void {
     this.state = "menu";
     this.levelsEl.classList.add("hidden");
-    this.buildMenu();
+    this.muteEl.classList.add("hidden");
+    el("code-row").classList.add("hidden");
     this.buildContracts();
     el("bank-value").textContent = this.save.scrap.toLocaleString();
 
@@ -550,7 +543,7 @@ class Game {
     });
     saveSave(this.save);
 
-    const prior = this.runs.filter((r) => r.mechanic === this.active.id && r !== record);
+    const prior = this.runs.filter((r) => r !== record);
     const priorBest = prior.length ? Math.max(...prior.map((r) => r.score)) : 0;
 
     el("result-title").textContent = level
@@ -565,7 +558,7 @@ class Game {
     el("result-score").textContent = String(record.score);
     el("result-best").textContent =
       record.score > priorBest && prior.length > 0
-        ? `New best for ${this.active.name}`
+        ? "New personal best"
         : priorBest > 0
           ? `Best so far: ${priorBest}`
           : "";
@@ -602,7 +595,7 @@ class Game {
         : `<b>${goal.remaining.toLocaleString()} more scrap</b> unlocks ${goal.label}.`
       : "<b>Everything is bought.</b> Nothing left but a better score.";
 
-    el("compare").innerHTML = this.comparisonTable();
+    el("compare").innerHTML = this.personalSummary();
 
     const doubleBtn = el<HTMLButtonElement>("btn-double");
     doubleBtn.disabled = !this.ads.rewardedReady || record.score <= 0;
@@ -750,27 +743,18 @@ class Game {
     }
   }
 
-  /**
-   * The point of the harness. Averages per mechanic on comparable runs, so the choice is made
-   * on evidence rather than on which one sounded best in the design document.
-   */
-  private comparisonTable(): string {
-    const lines: string[] = ["<b>All runs so far</b>"];
-    for (const m of this.mechanics) {
-      const rs = this.runs.filter((r) => r.mechanic === m.id);
-      if (rs.length === 0) {
-        lines.push(`${m.name}: not played yet`);
-        continue;
-      }
-      const avg = Math.round(rs.reduce((a, r) => a + r.score, 0) / rs.length);
-      const clear = Math.round((rs.filter((r) => r.won).length / rs.length) * 100);
-      const hits = (rs.reduce((a, r) => a + r.hits, 0) / rs.length).toFixed(1);
-      const apm = (
-        rs.reduce((a, r) => a + (r.duration > 0 ? r.actions / r.duration : 0), 0) / rs.length
-      ).toFixed(1);
-      lines.push(
-        `<b>${m.name}</b> — ${rs.length} runs · avg ${avg} · cleared ${clear}% · ${hits} hits · ${apm} actions/s`,
-      );
+  /** A short personal record. What the player is actually measuring themselves against. */
+  private personalSummary(): string {
+    const rs = this.runs;
+    if (rs.length === 0) return "";
+    const best = Math.max(...rs.map((r) => r.score));
+    const cleared = rs.filter((r) => r.won).length;
+    const lines = [
+      `<b>${rs.length}</b> run${rs.length === 1 ? "" : "s"} · best <b>${best.toLocaleString()}</b> · <b>${cleared}</b> cleared`,
+      `Levels <b>${this.save.levelsDone}/${LEVELS.length}</b> · lifetime scrap <b>${this.save.lifetimeScrap.toLocaleString()}</b>`,
+    ];
+    if (this.save.dailyDate === dailyCode() && this.save.dailyBest > 0) {
+      lines.push(`Today's best <b>${this.save.dailyBest.toLocaleString()}</b>`);
     }
     return lines.join("<br>");
   }

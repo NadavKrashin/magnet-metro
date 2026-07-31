@@ -84,6 +84,7 @@ body {
 
 /* ---------- Sound toggle ---------- */
 
+/* Shown only during a run. In menus it sat on top of the panel's own text. */
 .mute {
   position: absolute;
   top: calc(env(safe-area-inset-top, 0px) + 10px);
@@ -261,11 +262,20 @@ body {
   position: absolute;
   inset: 0;
   display: flex;
-  align-items: center;
+  /* Never `align-items: center` on a scrolling flex container: once the panel is taller than
+     the viewport it overflows both ways and the top becomes unreachable. Auto margins centre
+     it when there is room and simply stop when there is not. */
+  align-items: flex-start;
   justify-content: center;
-  padding: 18px;
+  padding: calc(env(safe-area-inset-top, 0px) + 16px) 16px
+    calc(env(safe-area-inset-bottom, 0px) + 16px);
   background: var(--paper-2);
   overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.panel {
+  margin: auto;
 }
 
 .panel {
@@ -480,6 +490,49 @@ button.primary {
 
 .compare b {
   font-weight: 700;
+}
+
+/* A settings row inside the panel, so menus do not need anything floating over them. */
+.panel-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.panel-row button {
+  font-family: var(--body);
+  font-weight: 700;
+  font-size: 10px;
+  letter-spacing: 0.13em;
+  padding: 10px 8px;
+  box-shadow: 3px 3px 0 var(--key);
+}
+
+.code-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.code-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 2px solid var(--key);
+  background: var(--paper-2);
+  color: var(--key);
+  font: 700 15px var(--mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.code-row button {
+  flex: none;
+  width: 74px;
+  padding: 10px 4px;
+  font-size: 15px;
+  box-shadow: 3px 3px 0 var(--key);
 }
 
 /* ---------- Bank, shop, goals ---------- */
