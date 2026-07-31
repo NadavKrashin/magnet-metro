@@ -69,6 +69,11 @@ await page.waitForTimeout(300);
 await page.screenshot({ path: join(outDir, "8-levels.png") });
 await page.locator("#btn-levels-close").click();
 await page.waitForTimeout(250);
+await page.locator("#btn-settings").click();
+await page.waitForTimeout(300);
+await page.screenshot({ path: join(outDir, "9-settings.png") });
+await page.locator("#btn-settings-close").click();
+await page.waitForTimeout(250);
 
 // Start the first mechanic.
 await page.locator("#btn-free").click();
@@ -87,6 +92,24 @@ for (let i = 0; i < 26; i++) {
   await page.waitForTimeout(260);
 }
 await page.screenshot({ path: join(outDir, "3-play.png") });
+
+// Pause has to actually stop the world, not just cover it.
+await page.locator("#btn-pause").click();
+await page.waitForTimeout(400);
+await page.screenshot({ path: join(outDir, "10-paused.png") });
+const frozen = await page.evaluate(async () => {
+  const read = () => document.getElementById("paused-score").textContent;
+  const before = read();
+  await new Promise((r) => setTimeout(r, 700));
+  return { before, after: read() };
+});
+if (frozen.before !== frozen.after) {
+  errors.push(`pause did not stop the run: ${frozen.before} -> ${frozen.after}`);
+} else {
+  console.log(`pause holds the run at ${frozen.before}`);
+}
+await page.locator("#btn-resume").click();
+await page.waitForTimeout(300);
 
 // Frame budget check. The print look composites a lot of multiply passes, and a phone is a
 // far weaker machine than this one, so a regression here matters.

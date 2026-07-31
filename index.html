@@ -15,7 +15,6 @@
     <div id="app">
       <canvas id="game"></canvas>
       <div id="grain" class="grain" aria-hidden="true"></div>
-      <button id="mute" class="mute" type="button">SOUND ON</button>
 
       <div id="hud" class="hidden">
         <div class="hud-top">
@@ -23,7 +22,10 @@
             <span id="score">0</span>
             <span id="mult" class="mult">x1</span>
           </div>
-          <div id="integrity" class="integrity"></div>
+          <div class="hud-right">
+            <button id="btn-pause" class="pause" type="button" aria-label="Pause">II</button>
+            <div id="integrity" class="integrity"></div>
+          </div>
         </div>
         <div class="progress"><div id="progress-fill"></div></div>
         <div id="objective" class="objective hidden">
@@ -67,6 +69,26 @@
             <div id="contract-list"></div>
           </div>
 
+          <button id="btn-settings" class="wide quiet">Settings</button>
+        </div>
+      </div>
+
+      <div id="paused" class="screen hidden">
+        <div class="panel">
+          <h2>Paused</h2>
+          <div class="score-big"><span id="paused-score">0</span></div>
+          <div id="paused-note" class="best"></div>
+          <div class="buttons">
+            <button id="btn-resume" class="primary">Resume</button>
+            <button id="btn-restart">Restart</button>
+          </div>
+          <button id="btn-quit" class="wide quiet">Give up and bank it</button>
+        </div>
+      </div>
+
+      <div id="settings" class="screen hidden">
+        <div class="panel">
+          <h2>Settings</h2>
           <div class="panel-row">
             <button id="btn-sound" type="button">Sound on</button>
             <button id="btn-code-toggle" type="button">Friend's code</button>
@@ -82,6 +104,19 @@
             />
             <button id="btn-code-go" class="primary">Go</button>
           </div>
+          <button id="btn-privacy" class="wide quiet hidden">Privacy choices</button>
+          <button id="btn-policy" class="wide quiet hidden">Privacy policy</button>
+          <button id="btn-reset" class="wide quiet">Reset all progress</button>
+          <div id="reset-confirm" class="goal hidden">
+            <b>This deletes everything</b> — levels, scrap, upgrades and editions. It cannot be
+            undone.
+            <div class="buttons">
+              <button id="btn-reset-yes" class="primary">Delete it all</button>
+              <button id="btn-reset-no">Keep it</button>
+            </div>
+          </div>
+          <p class="foot">Magnet Metro <span id="version"></span></p>
+          <button id="btn-settings-close" class="wide primary">Back</button>
         </div>
       </div>
 
@@ -118,8 +153,6 @@
             <button id="tab-editions" class="tab">Editions</button>
           </div>
           <div id="shop-list" class="shop-list"></div>
-          <button id="btn-privacy" class="wide quiet hidden">Privacy choices</button>
-          <button id="btn-policy" class="wide quiet hidden">Privacy policy</button>
           <button id="btn-shop-close" class="wide primary">Back</button>
         </div>
       </div>

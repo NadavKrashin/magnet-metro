@@ -6,7 +6,7 @@ import { Renderer } from "./render/renderer";
 import { GameAudio } from "./audio/audio";
 import { autopilot, newAutopilotState, type AutopilotState } from "./game/autopilot";
 import { makeGrainTile } from "./render/texture";
-import { COURSE_LENGTH, VIEW_WIDTH, World } from "./game/world";
+import { COURSE_LENGTH, OPENING_LENGTH, VIEW_WIDTH, World } from "./game/world";
 import {
   EDITIONS,
   UPGRADES,
@@ -30,6 +30,8 @@ import {
 import { applyEdition } from "./render/palette";
 import { STORAGE_KEYS, storage } from "./game/storage";
 import { Analytics, DebugSink } from "./analytics/analytics";
+import { BeaconSink, FirebaseSink, installId } from "./analytics/sinks";
+import { ANALYTICS_ENDPOINT, USE_FIREBASE } from "./analytics/config";
 import { AdsService } from "./ads/ads";
 import { PRIVACY_POLICY_URL, REWARD } from "./ads/config";
 import type { Mechanic } from "./mechanics/types";
@@ -37,6 +39,7 @@ import { PolarityMechanic } from "./mechanics/polarity";
 
 const RUNS_KEY = "mm_runs_v1";
 const MUTE_KEY = "mm_muted_v1";
+const APP_VERSION = "1.0.0";
 
 interface RunRecord {
   mechanic: string;
@@ -76,7 +79,7 @@ function saveRuns(runs: RunRecord[]): void {
   }
 }
 
-type State = "menu" | "playing" | "results" | "shop" | "revive" | "levels";
+type State = "menu" | "playing" | "results" | "shop" | "revive" | "levels" | "paused" | "settings";
 
 class Game {
   private renderer: Renderer;
@@ -127,11 +130,12 @@ class Game {
   private menuEl = el("menu");
   private resultsEl = el("results");
   private seedInput = el<HTMLInputElement>("seed-input");
-  private muteEl = el<HTMLButtonElement>("mute");
   private soundEl = el<HTMLButtonElement>("btn-sound");
   private shopEl = el("shop");
   private reviveEl = el("revive");
   private levelsEl = el("levels");
+  private pausedEl = el("paused");
+  private settingsEl = el("settings");
   private objectiveEl = el("objective");
 
   constructor() {
@@ -152,7 +156,6 @@ class Game {
       this.audio.unlock();
       this.applyMute(!this.audio.muted);
     };
-    this.muteEl.addEventListener("click", toggleSound);
     this.soundEl.addEventListener("click", toggleSound);
 
     el("btn-retry").addEventListener("click", () => this.startRun());
@@ -169,6 +172,39 @@ class Game {
       this.levelIndex = -1;
       this.startRun();
     });
+    el("btn-pause").addEventListener("click", () => this.pause("button"));
+    el("btn-resume").addEventListener("click", () => this.resume());
+    el("btn-restart").addEventListener("click", () => {
+      this.pausedEl.classList.add("hidden");
+      this.startRun();
+    });
+    el("btn-quit").addEventListener("click", () => {
+      this.pausedEl.classList.add("hidden");
+      this.analytics.track("run_quit", {
+        progressPct: Math.round(this.world.progress * 100),
+        score: this.world.score,
+      });
+      // Banked rather than binned: the player earned what is on the counter, and taking it
+      // away for quitting is the kind of thing that makes people quit for good.
+      this.endRun();
+    });
+
+    el("btn-settings").addEventListener("click", () => this.showSettings());
+    el("btn-settings-close").addEventListener("click", () => this.showMenu());
+    el("btn-reset").addEventListener("click", () =>
+      el("reset-confirm").classList.remove("hidden"),
+    );
+    el("btn-reset-no").addEventListener("click", () =>
+      el("reset-confirm").classList.add("hidden"),
+    );
+    el("btn-reset-yes").addEventListener("click", () => this.resetProgress());
+
+    // A phone that rings, a notification, a swipe to another app: none of those should cost
+    // the player a run. Pausing on hide is the single most valuable pause trigger there is.
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden && this.state === "playing") this.pause("background");
+    });
+
     el("btn-levels").addEventListener("click", () => this.showLevels());
     el("btn-levels-close").addEventListener("click", () => this.showMenu());
     el("btn-shop").addEventListener("click", () => this.showShop());
@@ -221,6 +257,22 @@ class Game {
     }
 
     this.analytics.addSink(new DebugSink());
+
+    // An anonymous, device-generated id, so events from one install can be joined into a
+    // session and a retention curve. It identifies nothing about the person and dies with the
+    // app.
+    const id = installId(
+      (k) => storage.getItem(k),
+      (k, v) => storage.setItem(k, v),
+    );
+    if (ANALYTICS_ENDPOINT) this.analytics.addSink(new BeaconSink(ANALYTICS_ENDPOINT, id));
+    if (USE_FIREBASE) {
+      const fb = new FirebaseSink();
+      void fb.init().then((ok) => {
+        if (ok) this.analytics.addSink(fb);
+      });
+    }
+
     this.analytics.start();
     // Consent, tracking permission and SDK start-up all happen in here, in that order.
     void this.ads.init();
@@ -243,8 +295,6 @@ class Game {
 
   private applyMute(muted: boolean): void {
     this.audio.setMuted(muted);
-    this.muteEl.textContent = muted ? "SOUND OFF" : "SOUND ON";
-    this.muteEl.classList.toggle("off", muted);
     this.soundEl.textContent = muted ? "Sound off" : "Sound on";
     this.soundEl.classList.toggle("off", muted);
     try {
@@ -325,10 +375,23 @@ class Game {
     this.revivedThisRun = false;
     this.autopilotState = newAutopilotState();
     this.analytics.noteRunStarted();
+    const startingLevel = this.levelIndex >= 0 ? LEVELS[this.levelIndex] : undefined;
+    if (startingLevel) {
+      const key = String(startingLevel.n);
+      const attempt = (this.save.levelAttempts[key] ?? 0) + 1;
+      this.save.levelAttempts[key] = attempt;
+      saveSave(this.save);
+      // Attempts per level is the clearest wall-detector there is: the level where the number
+      // climbs is the level people give up on.
+      this.analytics.track("level_attempt", { level: startingLevel.n, attempt });
+    }
+
     this.analytics.track("run_start", {
       mechanic: this.active.id,
       seed: this.seedCode,
       daily: this.isDaily,
+      level: startingLevel ? startingLevel.n : 0,
+      lifetimeRuns: this.save.runs,
     });
 
     this.audio.unlock();
@@ -416,6 +479,48 @@ class Game {
     }
   }
 
+  private pause(reason: string): void {
+    if (this.state !== "playing" || this.demo) return;
+    this.state = "paused";
+    this.audio.stopMusic();
+    el("paused-score").textContent = this.world.score.toLocaleString();
+    el("paused-note").textContent = `${Math.round(this.world.progress * 100)}% through · ${this.world.chain.length} pieces held`;
+    this.hud.classList.add("hidden");
+    this.pausedEl.classList.remove("hidden");
+    this.analytics.track("run_paused", { reason });
+  }
+
+  private resume(): void {
+    if (this.state !== "paused") return;
+    this.state = "playing";
+    this.pausedEl.classList.add("hidden");
+    this.hud.classList.remove("hidden");
+    this.input.reset();
+    this.audio.startMusic();
+  }
+
+  private showSettings(): void {
+    this.state = "settings";
+    this.menuEl.classList.add("hidden");
+    this.settingsEl.classList.remove("hidden");
+    el("reset-confirm").classList.add("hidden");
+    el("code-row").classList.add("hidden");
+    el("btn-privacy").classList.toggle("hidden", !this.ads.canShowPrivacyOptions);
+    el("btn-policy").classList.toggle("hidden", PRIVACY_POLICY_URL.length === 0);
+    el("version").textContent = `v${APP_VERSION}`;
+  }
+
+  private resetProgress(): void {
+    this.analytics.track("progress_reset", { levelsDone: this.save.levelsDone });
+    for (const key of STORAGE_KEYS) storage.setItem(key, "");
+    this.save = loadSave();
+    this.runs = [];
+    saveSave(this.save);
+    applyEdition(editionById(this.save.edition));
+    this.renderer.resize();
+    this.showMenu();
+  }
+
   private showLevels(): void {
     this.state = "levels";
     this.menuEl.classList.add("hidden");
@@ -456,8 +561,8 @@ class Game {
   private showMenu(): void {
     this.state = "menu";
     this.levelsEl.classList.add("hidden");
-    this.muteEl.classList.add("hidden");
-    el("code-row").classList.add("hidden");
+    this.settingsEl.classList.add("hidden");
+    this.pausedEl.classList.add("hidden");
     this.buildContracts();
     el("bank-value").textContent = this.save.scrap.toLocaleString();
 
@@ -615,6 +720,7 @@ class Game {
     }
     el<HTMLButtonElement>("btn-share").textContent = "Share run";
 
+    const progressPct = Math.round((Math.min(w.player.y, COURSE_LENGTH) / COURSE_LENGTH) * 100);
     this.analytics.track("run_end", {
       mechanic: this.active.id,
       won: record.won,
@@ -623,7 +729,24 @@ class Game {
       hits: record.hits,
       duration: Math.round(record.duration),
       daily: this.isDaily,
+      level: level ? level.n : 0,
+      // Where the run stopped, in ten-percent bands. A histogram of this is the drop-off
+      // curve, and it says far more about difficulty than an average score ever will.
+      progressPct,
+      progressBand: Math.min(9, Math.floor(progressPct / 10)) * 10,
+      lifetimeRuns: this.save.runs,
+      revived: this.revivedThisRun,
     });
+
+    // The two milestones that decide whether a new player ever comes back at all.
+    if (w.player.y >= OPENING_LENGTH) this.analytics.track("tutorial_completed", {});
+    if (record.won && this.save.runs === 1) this.analytics.track("first_run_completed", {});
+    if (levelCleared && level) {
+      this.analytics.track("level_cleared", {
+        level: level.n,
+        attempts: this.save.levelAttempts[String(level.n)] ?? 1,
+      });
+    }
     this.analytics.track("currency_earned", { amount: banked, source: "run" });
     for (const done of completed) this.analytics.track("contract_completed", { detail: done });
 

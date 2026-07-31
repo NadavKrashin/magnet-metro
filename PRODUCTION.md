@@ -59,11 +59,13 @@ nothing. Details in `MONETISATION.md`.
 
 ## Stage 4 — Analytics you can actually read
 
-The taxonomy and call sites already exist in `src/analytics/analytics.ts`; only a sink is
-missing, so this is genuinely one file.
+Events, sinks and the install id all exist. Only the destination is missing. Full detail and
+the five questions worth asking are in `ANALYTICS.md`.
 
-- [ ] Add **Firebase Analytics** (or any collector) as an `AnalyticsSink`. Without it you are
-      flying blind on the only number that decides whether promotion is worth doing.
+- [ ] Either `npm install @capacitor-firebase/analytics firebase`, add the two Firebase config
+      files to the native projects and set `USE_FIREBASE = true` — **or** set
+      `ANALYTICS_ENDPOINT` to a URL you control. Both live in `src/analytics/config.ts`.
+- [ ] Declare the anonymous install id in your privacy policy and Data Safety form.
 - [ ] Confirm **D1 retention** is visible in whatever you choose. It is the gate for everything
       in `MARKETING.md`.
 
@@ -110,9 +112,6 @@ Copy, keywords and screenshot captions are written and ready to paste in `MARKET
 
 Not blockers for a soft launch, but each is a real rough edge:
 
-- **No pause.** A run cannot be interrupted, which is awkward on a phone that rings.
-- **No settings screen.** No way to reset progress, and no way to reach the privacy policy
-  except through the Workshop.
 - **No cloud save.** Progress is durable on-device (native Preferences) but reinstalling or
   changing phone starts from zero. Fine for now; it stops being fine the moment you sell a
   "remove ads" purchase, because losing that is a refund request.

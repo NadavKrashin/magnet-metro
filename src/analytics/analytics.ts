@@ -24,8 +24,17 @@ export type EventName =
   // Run
   | "run_start"
   | "run_end"
+  | "run_paused"
+  | "run_quit"
   | "press_result"
+  // The first-session funnel. These are the events that answer why people leave.
+  | "tutorial_reached_tap"
+  | "tutorial_completed"
+  | "first_run_completed"
+  | "level_attempt"
+  | "level_cleared"
   // Progression
+  | "progress_reset"
   | "currency_earned"
   | "currency_spent"
   | "upgrade_bought"

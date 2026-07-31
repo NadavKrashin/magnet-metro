@@ -99,4 +99,5 @@ export const STORAGE_KEYS = [
   "mm_muted_v1",
   "mm_session_v1",
   "mm_first_open_v1",
+  "mm_install_id_v1",
 ] as const;

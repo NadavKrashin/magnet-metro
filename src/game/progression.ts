@@ -401,6 +401,11 @@ export interface SaveData {
   contracts: ActiveContract[];
   /** How many campaign levels have been completed. Levels unlock in order. */
   levelsDone: number;
+  /**
+   * Attempts per level, keyed by level number. This is the single most useful retention
+   * number the game can collect: the level where attempts pile up is the level people quit on.
+   */
+  levelAttempts: Record<string, number>;
 }
 
 function emptySave(): SaveData {
@@ -415,6 +420,7 @@ function emptySave(): SaveData {
     dailyBest: 0,
     contracts: refillContracts([]),
     levelsDone: 0,
+    levelAttempts: {},
   };
 }
 
@@ -436,6 +442,7 @@ export function loadSave(): SaveData {
       dailyBest: Number(parsed.dailyBest) || 0,
       contracts: refillContracts(parsed.contracts ?? []),
       levelsDone: Number(parsed.levelsDone) || 0,
+      levelAttempts: parsed.levelAttempts ?? {},
     };
   } catch {
     return emptySave();

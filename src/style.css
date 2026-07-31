@@ -84,8 +84,9 @@ body {
 
 /* ---------- Sound toggle ---------- */
 
-/* Shown only during a run. In menus it sat on top of the panel's own text. */
+/* Unused now that sound lives in Settings; kept out of the layout entirely. */
 .mute {
+  display: none;
   position: absolute;
   top: calc(env(safe-area-inset-top, 0px) + 10px);
   right: 10px;
@@ -153,8 +154,6 @@ body {
 .integrity {
   display: flex;
   gap: 5px;
-  padding-top: 8px;
-  padding-right: 62px; /* clear of the sound toggle */
 }
 
 .cell {
@@ -254,6 +253,29 @@ body {
   letter-spacing: 0.16em;
   color: var(--key);
   opacity: 0.65;
+}
+
+/* The HUD is pointer-events:none so the canvas gets every touch; the pause button opts back
+   in, and is the only interactive thing over the play area. */
+.hud-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 7px;
+}
+
+.pause {
+  pointer-events: auto;
+  flex: none;
+  width: 38px;
+  padding: 7px 0;
+  font: 700 13px/1 var(--body);
+  letter-spacing: 0.16em;
+  color: var(--key);
+  background: var(--paper);
+  border: 2px solid var(--key);
+  box-shadow: 3px 3px 0 var(--key);
+  cursor: pointer;
 }
 
 /* ---------- Screens ---------- */
