@@ -13,6 +13,17 @@
  * four scattered ones.
  */
 
+/**
+ * Public URL of your privacy policy.
+ *
+ * This is a hard requirement three times over: Apple, Google Play, and AdMob each demand a
+ * reachable policy for any app that serves ads, and it must name the ad SDK and the data it
+ * collects. The app will submit without it and be rejected.
+ *
+ * Leave empty and the in-app link stays hidden; set it and the link appears in the Workshop.
+ */
+export const PRIVACY_POLICY_URL = "";
+
 /** Flip to true only when every ID below is a real one from your own AdMob account. */
 export const LIVE = false;
 

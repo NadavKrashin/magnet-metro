@@ -31,7 +31,7 @@ import { applyEdition } from "./render/palette";
 import { STORAGE_KEYS, storage } from "./game/storage";
 import { Analytics, DebugSink } from "./analytics/analytics";
 import { AdsService } from "./ads/ads";
-import { REWARD } from "./ads/config";
+import { PRIVACY_POLICY_URL, REWARD } from "./ads/config";
 import type { Mechanic } from "./mechanics/types";
 import { PolarityMechanic } from "./mechanics/polarity";
 
@@ -209,6 +209,16 @@ class Game {
     el("btn-double").addEventListener("click", () => void this.watchToDouble());
     el("btn-share").addEventListener("click", () => void this.shareRun());
     el("btn-privacy").addEventListener("click", () => void this.ads.showPrivacyOptions());
+    el("btn-policy").addEventListener("click", () => {
+      if (PRIVACY_POLICY_URL) window.open(PRIVACY_POLICY_URL, "_blank", "noopener");
+    });
+
+    if (!PRIVACY_POLICY_URL) {
+      console.warn(
+        "No PRIVACY_POLICY_URL set in src/ads/config.ts. Apple, Google Play and AdMob all " +
+          "require a reachable privacy policy for an ad-supported app; submission will be rejected.",
+      );
+    }
 
     this.analytics.addSink(new DebugSink());
     this.analytics.start();
@@ -636,6 +646,7 @@ class Game {
     this.hud.classList.add("hidden");
     this.shopEl.classList.remove("hidden");
     el("btn-privacy").classList.toggle("hidden", !this.ads.canShowPrivacyOptions);
+    el("btn-policy").classList.toggle("hidden", PRIVACY_POLICY_URL.length === 0);
     this.renderShop();
   }
 

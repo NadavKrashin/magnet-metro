@@ -1,6 +1,6 @@
 {
   "name": "magnet-metro",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "description": "One-thumb arcade salvage game. Mechanic prototype harness.",
   "type": "module",
