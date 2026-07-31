@@ -109,7 +109,7 @@ a format in aggregate:
 | `currency_earned`, `currency_spent` | `amount`, `source` / `sink` |
 | `upgrade_bought`, `edition_bought` | `id`, `level` |
 | `contract_completed` | `detail` |
-| `share_opened` | `score`, `seed` |
+| `share_opened`, `challenge_opened` | `score`, `seed` |
 | `consent_state_updated`, `att_prompt` | `status` / `result` |
 | `rewarded_offered`, `rewarded_offer_accepted`, `rewarded_completed`, `rewarded_abandoned` | `placement` |
 | `interstitial_eligible` | `shown`, `reason` |

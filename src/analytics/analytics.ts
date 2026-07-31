@@ -42,6 +42,7 @@ export type EventName =
   | "contract_completed"
   // Virality
   | "share_opened"
+  | "challenge_opened"
   // Ads
   | "ads_ready"
   | "ads_skipped"

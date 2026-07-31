@@ -31,7 +31,7 @@ import { applyEdition } from "./render/palette";
 import { STORAGE_KEYS, storage } from "./game/storage";
 import { Analytics, DebugSink } from "./analytics/analytics";
 import { BeaconSink, FirebaseSink, installId } from "./analytics/sinks";
-import { ANALYTICS_ENDPOINT, USE_FIREBASE } from "./analytics/config";
+import { ANALYTICS_ENDPOINT, SHARE_BASE_URL, USE_FIREBASE } from "./analytics/config";
 import { AdsService } from "./ads/ads";
 import { PRIVACY_POLICY_URL, REWARD } from "./ads/config";
 import type { Mechanic } from "./mechanics/types";
@@ -225,6 +225,7 @@ class Game {
       const row = el("code-row");
       const opening = row.classList.contains("hidden");
       row.classList.toggle("hidden", !opening);
+      el("code-help").classList.toggle("hidden", !opening);
       if (opening) this.seedInput.focus();
     });
     el("btn-code-go").addEventListener("click", () => {
@@ -279,8 +280,16 @@ class Game {
 
     window.addEventListener("resize", this.onResize);
     this.onResize();
+
+    const shared = new URLSearchParams(location.search).get("course");
     if (this.demo) {
       document.body.classList.add("demo");
+      this.startRun();
+    } else if (shared && shared.trim().length > 0) {
+      // Someone followed a challenge link. Straight into their course — asking them to press
+      // another button first is the surest way to lose them on the doorstep.
+      this.seedCode = shared.trim().toUpperCase();
+      this.analytics.track("challenge_opened", { seed: this.seedCode });
       this.startRun();
     } else {
       this.showMenu();
@@ -465,7 +474,14 @@ class Game {
    * challenge rather than a boast — the recipient can play the exact same course.
    */
   private async shareRun(): Promise<void> {
-    const text = `I hauled ${this.lastRunScore.toLocaleString()} out of Magnet Metro on course ${this.seedCode}. Beat it.`;
+    // A link beats a code every time: the recipient taps once and is in the same course,
+    // instead of being asked to open the game and type eight characters correctly.
+    const link = SHARE_BASE_URL
+      ? `${SHARE_BASE_URL.replace(/\/$/, "")}/?course=${encodeURIComponent(this.seedCode)}`
+      : "";
+    const text = link
+      ? `I hauled ${this.lastRunScore.toLocaleString()} out of Magnet Metro. Same course, your turn: ${link}`
+      : `I hauled ${this.lastRunScore.toLocaleString()} out of Magnet Metro on course ${this.seedCode}. Open the game, Settings, "Play a friend's course", and paste ${this.seedCode}.`;
     this.analytics.track("share_opened", { score: this.lastRunScore, seed: this.seedCode });
     try {
       if (navigator.share) {
@@ -505,6 +521,7 @@ class Game {
     this.settingsEl.classList.remove("hidden");
     el("reset-confirm").classList.add("hidden");
     el("code-row").classList.add("hidden");
+    el("code-help").classList.add("hidden");
     el("btn-privacy").classList.toggle("hidden", !this.ads.canShowPrivacyOptions);
     el("btn-policy").classList.toggle("hidden", PRIVACY_POLICY_URL.length === 0);
     el("version").textContent = `v${APP_VERSION}`;

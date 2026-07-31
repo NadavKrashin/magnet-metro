@@ -9,8 +9,17 @@
  * rather own the raw data, or want both.
  */
 
+/**
+ * Where the web build is hosted, e.g. "https://magnetmetro.example.com".
+ *
+ * When set, sharing a run produces a tappable link that opens straight into that exact
+ * course. When empty it falls back to sharing the raw code, which works but asks the
+ * recipient to type it — and nobody types a code.
+ */
+export const SHARE_BASE_URL: string = "";
+
 /** HTTPS endpoint that accepts a JSON POST. Empty disables the beacon. */
-export const ANALYTICS_ENDPOINT = "";
+export const ANALYTICS_ENDPOINT: string = "";
 
 /**
  * Send to Firebase Analytics. Requires:

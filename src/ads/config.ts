@@ -22,7 +22,7 @@
  *
  * Leave empty and the in-app link stays hidden; set it and the link appears in the Workshop.
  */
-export const PRIVACY_POLICY_URL = "";
+export const PRIVACY_POLICY_URL: string = "";
 
 /** Flip to true only when every ID below is a real one from your own AdMob account. */
 export const LIVE = false;

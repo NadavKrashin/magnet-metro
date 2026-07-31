@@ -115,9 +115,14 @@ Caption: "30 seconds". Pure "number goes up" satisfaction, no rules to teach.
 visible. Caption: "a game that looks like a screenprint". Aimed at design-interested people
 rather than gamers, and it reaches an audience no gameplay ad will.
 
-**5. Beat my course.** A creator plays today's course, posts their score and the code. The
-deterministic seed means viewers play the *exact same course* — that turns a view into a
-challenge, which is the only kind of share that converts.
+**5. Beat my course.** A creator plays today's course and posts their score with the link. The
+deterministic seed means viewers open it and land in the *exact same course* — that turns a
+view into a challenge, which is the only kind of share that converts.
+
+For this to work, set `SHARE_BASE_URL` in `src/analytics/config.ts` to wherever the web build
+is hosted. Sharing then produces a tappable link that opens straight into the course. Left
+empty, sharing falls back to a raw code the recipient has to type in by hand, and nobody types
+a code.
 
 ## Where to post, specifically
 
