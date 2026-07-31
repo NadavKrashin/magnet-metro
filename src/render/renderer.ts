@@ -1,41 +1,19 @@
 import { TAU } from "../core/math";
 import { TRACK_HALF, VIEW_WIDTH, World } from "../game/world";
 import type { View } from "./view";
+import {
+  INK_BLUE,
+  INK_KEY,
+  INK_RED,
+  MISREGISTER_X,
+  MISREGISTER_Y,
+  PAPER,
+  PAPER_SHADE,
+  inkFor,
+} from "./palette";
+import { makeHalftoneTile } from "./texture";
 
-const COLOR_BLUE = "#5cc8ff";
-const COLOR_RED = "#ff5d6c";
-const COLOR_NEUTRAL = "#9fb4cc";
-const COLOR_ANCHOR = "#7cf5c8";
-
-function chargeColor(polarity: number): string {
-  if (polarity === 1) return COLOR_BLUE;
-  if (polarity === -1) return COLOR_RED;
-  return COLOR_NEUTRAL;
-}
-
-/**
- * Charge is drawn as a shape as well as a colour: blue is a circle, red is a diamond.
- * Colour alone would fail for colour-blind players and reads poorly in a compressed video
- * clip, which is where most people will see this game first.
- */
-function traceChargeShape(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  r: number,
-  polarity: number,
-): void {
-  ctx.beginPath();
-  if (polarity === -1) {
-    ctx.moveTo(x, y - r * 1.25);
-    ctx.lineTo(x + r * 1.25, y);
-    ctx.lineTo(x, y + r * 1.25);
-    ctx.lineTo(x - r * 1.25, y);
-    ctx.closePath();
-  } else {
-    ctx.arc(x, y, r, 0, TAU);
-  }
-}
+type Trace = (cx: number, cy: number, rr: number) => void;
 
 export class Renderer implements View {
   readonly canvas: HTMLCanvasElement;
@@ -46,6 +24,8 @@ export class Renderer implements View {
   private cameraY = 0;
   private shakeX = 0;
   private shakeY = 0;
+
+  private background: HTMLCanvasElement | null = null;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -69,7 +49,9 @@ export class Renderer implements View {
   }
 
   resize(): void {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    // Capped at 2: beyond that the extra pixels are invisible on flat printed shapes and
+    // cost real frame time on the cheap Android hardware this genre lives on.
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const w = this.canvas.clientWidth || 1;
     const h = this.canvas.clientHeight || 1;
     this.canvas.width = Math.round(w * dpr);
@@ -77,6 +59,7 @@ export class Renderer implements View {
     this.cw = this.canvas.width;
     this.ch = this.canvas.height;
     this.scale = this.cw / VIEW_WIDTH;
+    this.bakeBackground();
   }
 
   toScreenX(worldX: number): number {
@@ -86,6 +69,65 @@ export class Renderer implements View {
   toScreenY(worldY: number): number {
     return this.ch - (worldY - this.cameraY) * this.scale + this.shakeY;
   }
+
+  // ---------------------------------------------------------------------------
+  // Print primitives
+  // ---------------------------------------------------------------------------
+
+  private traceCircle: Trace = (cx, cy, rr) => {
+    this.ctx.beginPath();
+    this.ctx.arc(cx, cy, rr, 0, TAU);
+  };
+
+  private traceDiamond: Trace = (cx, cy, rr) => {
+    const ctx = this.ctx;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - rr * 1.28);
+    ctx.lineTo(cx + rr * 1.28, cy);
+    ctx.lineTo(cx, cy + rr * 1.28);
+    ctx.lineTo(cx - rr * 1.28, cy);
+    ctx.closePath();
+  };
+
+  private traceFor(polarity: number): Trace {
+    return polarity === -1 ? this.traceDiamond : this.traceCircle;
+  }
+
+  /**
+   * One printed element: the colour plate laid down slightly off-register, then the black key
+   * plate on top. The offset is the whole trick — perfectly aligned plates read as vector clip
+   * art, and a hair of misregistration reads as something physically printed.
+   */
+  private printShape(
+    trace: Trace,
+    x: number,
+    y: number,
+    r: number,
+    ink: string | null,
+    keyWeight: number,
+    keyInk = INK_KEY,
+  ): void {
+    const ctx = this.ctx;
+    const mx = MISREGISTER_X * this.scale;
+    const my = MISREGISTER_Y * this.scale;
+
+    if (ink) {
+      ctx.fillStyle = ink;
+      trace(x + mx, y + my, r);
+      ctx.fill();
+    }
+    if (keyWeight > 0) {
+      ctx.strokeStyle = keyInk;
+      ctx.lineWidth = keyWeight;
+      ctx.lineJoin = "round";
+      trace(x, y, r);
+      ctx.stroke();
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Frame
+  // ---------------------------------------------------------------------------
 
   draw(world: World): void {
     const ctx = this.ctx;
@@ -100,269 +142,361 @@ export class Renderer implements View {
       this.shakeY = 0;
     }
 
-    this.drawBackground(ctx);
-    this.drawAnchors(ctx, world);
-    this.drawScrap(ctx, world);
-    this.drawHazards(ctx, world);
-    this.drawChain(ctx, world);
-    this.drawPlayer(ctx, world);
-    this.drawParticles(ctx, world);
-    this.drawFloats(ctx, world);
+    this.drawFurniture(world);
+
+    // Everything from here is ink. Multiply is what makes two inks crossing produce a third,
+    // darker colour instead of one simply hiding the other.
+    ctx.save();
+    ctx.globalCompositeOperation = "multiply";
+    this.drawAnchors(world);
+    this.drawScrap(world);
+    this.drawHazards(world);
+    this.drawChain(world);
+    this.drawPlayer(world);
+    this.drawParticles(world);
+    ctx.restore();
+
+    // Every knocked-out detail in one pass. Switching composite mode per object was costing
+    // more than all the drawing put together — each switch forces the renderer to flush.
+    this.drawKnockouts(world);
+    this.drawFloats(world);
   }
 
-  /** Called after the mechanic overlay so the flash sits on top of everything. */
-  drawPostFx(world: World): void {
-    if (world.hitFlash <= 0.001) return;
+  /**
+   * Printing the paper colour back over ink, which is how a screenprint makes a hole in a
+   * solid. Batched so the composite mode changes twice a frame rather than fifty times.
+   */
+  private drawKnockouts(world: World): void {
     const ctx = this.ctx;
+    const fieldPol = world.field.polarity;
     ctx.save();
-    ctx.globalAlpha = world.hitFlash * 0.28;
-    ctx.fillStyle = COLOR_RED;
-    ctx.fillRect(0, 0, this.cw, this.ch);
+    ctx.fillStyle = PAPER;
+    ctx.strokeStyle = PAPER;
+
+    for (const s of world.scrap) {
+      if (s.value < 50) continue;
+      const matches = fieldPol === 0 || s.polarity === 0 || s.polarity === fieldPol;
+      if (!matches) continue;
+      const y = this.toScreenY(s.y);
+      if (y < -40 || y > this.ch + 40) continue;
+      this.traceFor(s.polarity)(this.toScreenX(s.x), y, s.r * this.scale * 0.38);
+      ctx.fill();
+    }
+
+    ctx.lineWidth = Math.max(1.5, this.scale * 0.17);
+    for (const h of world.hazards) {
+      const y = this.toScreenY(h.y);
+      if (y < -60 || y > this.ch + 60) continue;
+      const x = this.toScreenX(h.x);
+      const r = h.r * this.scale;
+      const edible = world.options.charged && fieldPol !== 0 && h.polarity === fieldPol;
+      if (edible) {
+        this.traceFor(h.polarity)(x, y, r * 0.5);
+        ctx.stroke();
+      } else {
+        // A slash through the black mass, so a threat has some internal structure.
+        ctx.beginPath();
+        ctx.moveTo(x - r * 0.42, y - r * 0.42);
+        ctx.lineTo(x + r * 0.42, y + r * 0.42);
+        ctx.stroke();
+      }
+    }
+
+    if (!(world.invulnTimer > 0 && Math.floor(world.invulnTimer * 12) % 2 === 0)) {
+      const p = world.player;
+      const x = this.toScreenX(p.x);
+      const y = this.toScreenY(p.y);
+      const r = p.r * this.scale * (1 + world.collectPulse * 0.2) * 0.42;
+      const trace = this.traceFor(world.field.polarity);
+      trace(x, y, r);
+      ctx.fill();
+      ctx.strokeStyle = INK_KEY;
+      ctx.lineWidth = Math.max(2, this.scale * 0.2);
+      trace(x, y, r);
+      ctx.stroke();
+    }
     ctx.restore();
   }
 
-  private drawBackground(ctx: CanvasRenderingContext2D): void {
-    const g = ctx.createLinearGradient(0, 0, 0, this.ch);
-    g.addColorStop(0, "#080d18");
-    g.addColorStop(1, "#111a2e");
-    ctx.fillStyle = g;
+  /**
+   * The stock, the shaded margins, the lane rules and the registration marks never move — the
+   * camera only scrolls vertically and the lane is fixed on screen. Printing them once into an
+   * offscreen sheet and blitting it turns several pattern fills per frame into one drawImage.
+   */
+  private bakeBackground(): void {
+    const plate = document.createElement("canvas");
+    plate.width = this.cw;
+    plate.height = this.ch;
+    const ctx = plate.getContext("2d");
+    if (!ctx) return;
+
+    const leftEdge = this.cw / 2 - TRACK_HALF * this.scale;
+    const rightEdge = this.cw / 2 + TRACK_HALF * this.scale;
+
+    ctx.fillStyle = PAPER;
     ctx.fillRect(0, 0, this.cw, this.ch);
 
-    // Scrolling floor lines give a sense of speed without any extra assets.
-    const spacing = 20;
+    ctx.fillStyle = PAPER_SHADE;
+    ctx.fillRect(0, 0, leftEdge, this.ch);
+    ctx.fillRect(rightEdge, 0, this.cw - rightEdge, this.ch);
+
+    const halftone = ctx.createPattern(makeHalftoneTile(6, 1.3, "#6b6355"), "repeat");
+    if (halftone) {
+      ctx.save();
+      ctx.globalAlpha = 0.45;
+      ctx.fillStyle = halftone;
+      ctx.fillRect(0, 0, leftEdge, this.ch);
+      ctx.fillRect(rightEdge, 0, this.cw - rightEdge, this.ch);
+      ctx.restore();
+    }
+
+    ctx.strokeStyle = INK_KEY;
+    ctx.lineWidth = Math.max(2, this.scale * 0.22);
+    ctx.beginPath();
+    ctx.moveTo(leftEdge, 0);
+    ctx.lineTo(leftEdge, this.ch);
+    ctx.moveTo(rightEdge, 0);
+    ctx.lineTo(rightEdge, this.ch);
+    ctx.stroke();
+
+    this.drawRegistrationMarkOn(ctx, leftEdge * 0.5, this.ch * 0.12);
+    this.drawRegistrationMarkOn(ctx, rightEdge + (this.cw - rightEdge) * 0.5, this.ch * 0.88);
+
+    this.background = plate;
+  }
+
+  /** Blit the baked sheet, then print the only marks that actually move. */
+  private drawFurniture(world: World): void {
+    const ctx = this.ctx;
+    if (this.background) ctx.drawImage(this.background, 0, 0);
+
+    ctx.save();
+    ctx.globalCompositeOperation = "multiply";
+
+    // Speed marks, in the manga sense: dense hatching that crowds the edges of the frame and
+    // leaves the centre clear. An evenly spaced grid of ticks reads as wallpaper, not motion,
+    // so these are irregular in both length and position and biased away from the middle.
+    const speedT = Math.min(1, (world.player.speed / 34 - 1) / 0.9);
+    const spacing = 13 - speedT * 6;
     const first = Math.floor(this.cameraY / spacing) * spacing;
-    ctx.strokeStyle = "rgba(110,150,215,0.10)";
-    ctx.lineWidth = Math.max(1, this.scale * 0.08);
+    ctx.strokeStyle = INK_KEY;
+    ctx.globalAlpha = 0.22 + speedT * 0.4;
+    ctx.lineWidth = Math.max(1, this.scale * 0.11);
     ctx.beginPath();
     for (let y = first; y < this.cameraY + this.viewHeightWorld + spacing; y += spacing) {
       const sy = this.toScreenY(y);
-      ctx.moveTo(this.toScreenX(-TRACK_HALF), sy);
-      ctx.lineTo(this.toScreenX(TRACK_HALF), sy);
+      // A cheap deterministic hash off the row, so marks do not crawl between frames.
+      const h = Math.sin(y * 12.9898) * 43758.5453;
+      for (let k = 0; k < 6; k++) {
+        const rnd = (h * (k + 1)) % 1;
+        const bias = rnd < 0 ? -1 : 1;
+        const t = Math.abs(rnd);
+        const sx = this.toScreenX(bias * (10 + t * 19));
+        const len = (5 + t * 16 + speedT * 14) * this.scale;
+        ctx.moveTo(sx, sy);
+        ctx.lineTo(sx, sy + len);
+      }
     }
     ctx.stroke();
-
-    // Track edges.
-    const edge = this.scale * 0.35;
-    ctx.fillStyle = "rgba(92,200,255,0.30)";
-    ctx.fillRect(this.toScreenX(-TRACK_HALF) - edge, 0, edge, this.ch);
-    ctx.fillRect(this.toScreenX(TRACK_HALF), 0, edge, this.ch);
-
-    // Dim everything outside the playable area so the lane reads instantly.
-    ctx.fillStyle = "rgba(4,7,14,0.55)";
-    ctx.fillRect(0, 0, this.toScreenX(-TRACK_HALF) - edge, this.ch);
-    ctx.fillRect(this.toScreenX(TRACK_HALF) + edge, 0, this.cw, this.ch);
+    ctx.restore();
   }
 
-  /** A soft halo. Cheaper than shadowBlur, which is expensive on mobile GPUs. */
-  private glow(
-    ctx: CanvasRenderingContext2D,
-    x: number,
-    y: number,
-    r: number,
-    color: string,
-    alpha: number,
-  ): void {
-    ctx.globalAlpha = alpha;
-    ctx.fillStyle = color;
+  private drawRegistrationMarkOn(ctx: CanvasRenderingContext2D, x: number, y: number): void {
+    const r = this.scale * 1.5;
+    if (r < 4) return;
+    ctx.strokeStyle = INK_KEY;
+    ctx.globalAlpha = 0.35;
+    ctx.lineWidth = Math.max(1, this.scale * 0.08);
     ctx.beginPath();
     ctx.arc(x, y, r, 0, TAU);
-    ctx.fill();
+    ctx.moveTo(x - r * 1.7, y);
+    ctx.lineTo(x + r * 1.7, y);
+    ctx.moveTo(x, y - r * 1.7);
+    ctx.lineTo(x, y + r * 1.7);
+    ctx.stroke();
     ctx.globalAlpha = 1;
   }
 
-  private drawScrap(ctx: CanvasRenderingContext2D, world: World): void {
+  private drawScrap(world: World): void {
     const fieldPol = world.field.polarity;
     for (const s of world.scrap) {
       const x = this.toScreenX(s.x);
       const y = this.toScreenY(s.y);
       if (y < -40 || y > this.ch + 40) continue;
       const r = s.r * this.scale;
-      const color = chargeColor(s.polarity);
-      // "Will this come to me?" has to be answerable at a glance. Matching pieces are bright
-      // and haloed; mismatched ones are dim and flat, so the screen sorts itself visually.
       const matches = fieldPol === 0 || s.polarity === 0 || s.polarity === fieldPol;
+      const trace = this.traceFor(s.polarity);
 
-      if (matches) {
-        this.glow(ctx, x, y, r * 2.4, color, 0.16);
-        ctx.globalAlpha = 1;
-      } else {
-        ctx.globalAlpha = 0.32;
-      }
 
-      ctx.fillStyle = color;
-      traceChargeShape(ctx, x, y, r, s.polarity);
-      ctx.fill();
+      // Yours is printed solid. Not yours is an unprinted outline — bare paper. That is a
+      // far stronger read than bright-versus-dim, and it costs nothing.
+      this.printShape(
+        trace,
+        x,
+        y,
+        r,
+        matches ? inkFor(s.polarity) : null,
+        Math.max(1.5, this.scale * (matches ? 0.17 : 0.13)),
+        matches ? INK_KEY : inkFor(s.polarity),
+      );
 
-      if (matches) {
-        // Bright core so items stay visible against the glow when densely packed.
-        ctx.fillStyle = "rgba(255,255,255,0.8)";
-        ctx.beginPath();
-        ctx.arc(x - r * 0.22, y - r * 0.22, r * 0.34, 0, TAU);
-        ctx.fill();
-      } else {
-        // A hollow outline reads as "inert" rather than merely faint.
-        ctx.globalAlpha = 0.5;
-        ctx.strokeStyle = color;
-        ctx.lineWidth = Math.max(1, this.scale * 0.1);
-        traceChargeShape(ctx, x, y, r, s.polarity);
-        ctx.stroke();
-      }
-      ctx.globalAlpha = 1;
     }
   }
 
-  private drawHazards(ctx: CanvasRenderingContext2D, world: World): void {
+  private drawHazards(world: World): void {
     const fieldPol = world.field.polarity;
     for (const h of world.hazards) {
       const x = this.toScreenX(h.x);
       const y = this.toScreenY(h.y);
       if (y < -60 || y > this.ch + 60) continue;
       const r = h.r * this.scale;
-      const tint = h.polarity === 1 ? COLOR_BLUE : h.polarity === -1 ? COLOR_RED : "#ff8a4d";
-      // A hazard in your colour is food, not a threat, and it must never look like the thing
-      // that kills you. Spikes appear only on what can actually hurt.
-      const edible =
-        world.options.charged && fieldPol !== 0 && h.polarity === fieldPol;
+      const edible = world.options.charged && fieldPol !== 0 && h.polarity === fieldPol;
+      const ink = inkFor(h.polarity);
 
       if (edible) {
-        // Filled, glowing and smooth: the same visual family as collectable scrap.
-        this.glow(ctx, x, y, r * 2.6, tint, 0.26);
-        ctx.fillStyle = tint;
-        traceChargeShape(ctx, x, y, r * 0.92, h.polarity);
-        ctx.fill();
-        ctx.fillStyle = "rgba(255,255,255,0.55)";
-        traceChargeShape(ctx, x, y, r * 0.34, h.polarity);
-        ctx.fill();
+        // Food. Printed in its own ink, smooth, with a knocked-out ring so it reads as
+        // something to swallow rather than something to survive.
+        this.printShape(this.traceFor(h.polarity), x, y, r * 0.95, ink, Math.max(2, this.scale * 0.2));
         continue;
       }
 
-      this.glow(ctx, x, y, r * 2.0, tint, 0.16);
-      ctx.fillStyle = "#1d2942";
-      ctx.lineWidth = Math.max(1.5, this.scale * 0.2);
-      ctx.strokeStyle = tint;
-
-      if (h.kind === "block") {
+      // Threat. Solid black key plate with the colour plate showing at the edges, and a ring
+      // of hard spikes. Heavy black is the loudest thing a two-colour print can do.
+      const spike: Trace = (cx, cy, rr) => {
+        const ctx = this.ctx;
         ctx.beginPath();
-        ctx.roundRect(x - r, y - r * 0.72, r * 2, r * 1.44, r * 0.3);
-        ctx.fill();
-        ctx.stroke();
-      } else {
-        ctx.beginPath();
-        ctx.arc(x, y, r, 0, TAU);
-        ctx.fill();
-        ctx.stroke();
-      }
+        const points = 10;
+        for (let i = 0; i < points * 2; i++) {
+          const a = (i / (points * 2)) * TAU - Math.PI / 2;
+          const rad = i % 2 === 0 ? rr * 1.34 : rr * 0.82;
+          const px = cx + Math.cos(a) * rad;
+          const py = cy + Math.sin(a) * rad;
+          if (i === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+      };
 
-      // Spikes read as "do not touch" at a glance, even at thumbnail size in an ad clip.
-      ctx.beginPath();
-      for (let i = 0; i < 6; i++) {
-        const a = (i / 6) * TAU;
-        ctx.moveTo(x + Math.cos(a) * r * 0.95, y + Math.sin(a) * r * 0.95);
-        ctx.lineTo(x + Math.cos(a) * r * 1.5, y + Math.sin(a) * r * 1.5);
-      }
-      ctx.stroke();
+      this.printShape(spike, x, y, r, ink, 0);
+      this.ctx.fillStyle = INK_KEY;
+      spike(x, y, r);
+      this.ctx.fill();
+
     }
   }
 
-  private drawAnchors(ctx: CanvasRenderingContext2D, world: World): void {
+  private drawAnchors(world: World): void {
     for (const a of world.anchors) {
       const x = this.toScreenX(a.x);
       const y = this.toScreenY(a.y);
       if (y < -60 || y > this.ch + 60) continue;
       const r = a.r * this.scale;
-
-      this.glow(ctx, x, y, r * (a.active ? 3.4 : 2.2), COLOR_ANCHOR, a.active ? 0.3 : 0.14);
-      ctx.strokeStyle = COLOR_ANCHOR;
-      ctx.lineWidth = Math.max(1.5, this.scale * 0.22);
-      ctx.beginPath();
-      ctx.arc(x, y, r, 0, TAU);
-      ctx.stroke();
-      ctx.fillStyle = COLOR_ANCHOR;
-      ctx.beginPath();
-      ctx.arc(x, y, r * 0.38, 0, TAU);
-      ctx.fill();
+      this.printShape(this.traceCircle, x, y, r, a.active ? INK_BLUE : null, Math.max(2, this.scale * 0.2));
     }
   }
 
-  private drawChain(ctx: CanvasRenderingContext2D, world: World): void {
-    const n = Math.min(world.chain.length, 70);
+  private drawChain(world: World): void {
+    const n = Math.min(world.chain.length, 90);
+    // Drawn tail-first so the pieces nearest the drone print over the ones behind them.
     for (let i = n - 1; i >= 0; i--) {
       const item = world.chain[i]!;
       const x = this.toScreenX(item.x);
       const y = this.toScreenY(item.y);
       if (y < -40 || y > this.ch + 40) continue;
-      // Taper the tail so a long chain still reads as a single object.
-      const taper = 1 - (i / n) * 0.45;
-      const r = item.r * this.scale * taper;
-      const color = chargeColor(item.polarity);
-      this.glow(ctx, x, y, r * 2.0, color, 0.1);
-      ctx.fillStyle = color;
-      ctx.globalAlpha = 0.55 + 0.45 * taper;
-      traceChargeShape(ctx, x, y, r, item.polarity);
-      ctx.fill();
-      ctx.globalAlpha = 1;
+      const taper = 1 - (i / n) * 0.32;
+      const r = item.r * this.scale * taper * 1.35;
+      this.printShape(
+        this.traceFor(item.polarity),
+        x,
+        y,
+        r,
+        inkFor(item.polarity),
+        Math.max(1, this.scale * 0.12),
+      );
     }
   }
 
-  private drawPlayer(ctx: CanvasRenderingContext2D, world: World): void {
+  private drawPlayer(world: World): void {
     const p = world.player;
     const x = this.toScreenX(p.x);
     const y = this.toScreenY(p.y);
-    const pulse = 1 + world.collectPulse * 0.18;
+    const pulse = 1 + world.collectPulse * 0.2;
     const r = p.r * this.scale * pulse;
     const pol = world.field.polarity;
-    const color = pol === 1 ? COLOR_BLUE : pol === -1 ? COLOR_RED : "#e8f2ff";
+    const ink = pol === 0 ? INK_KEY : inkFor(pol);
+    const trace = this.traceFor(pol);
 
-    // Blink while invulnerable so the player knows the hit registered and they are safe.
     if (world.invulnTimer > 0 && Math.floor(world.invulnTimer * 12) % 2 === 0) return;
 
-    this.glow(ctx, x, y, r * 3.0, color, 0.22);
+    this.printShape(trace, x, y, r, ink, Math.max(2.5, this.scale * 0.26));
 
-    // The drone wears the shape of its own charge. "I am a diamond, I collect diamonds" is a
-    // rule the player can infer from one glance instead of being told.
-    ctx.fillStyle = color;
-    traceChargeShape(ctx, x, y, r, pol);
-    ctx.fill();
-
-    ctx.fillStyle = "#ffffff";
-    traceChargeShape(ctx, x, y, r * 0.5, pol);
-    ctx.fill();
-
-    // A forward fin, so the drone has a clear facing and the shape is recognisable in a clip.
-    ctx.fillStyle = color;
-    ctx.beginPath();
-    ctx.moveTo(x, y - r * 2.0);
-    ctx.lineTo(x - r * 0.62, y - r * 0.5);
-    ctx.lineTo(x + r * 0.62, y - r * 0.5);
-    ctx.closePath();
-    ctx.fill();
   }
 
-  private drawParticles(ctx: CanvasRenderingContext2D, world: World): void {
+  /** Ink splatter rather than sparks: irregular blobs that shrink and fade. */
+  private drawParticles(world: World): void {
+    const ctx = this.ctx;
     for (const p of world.particles) {
       const t = p.life / p.maxLife;
       const x = this.toScreenX(p.x);
       const y = this.toScreenY(p.y);
-      ctx.globalAlpha = t * 0.9;
+      const r = p.size * this.scale * t * 1.4;
+      if (r < 0.4) continue;
+      ctx.globalAlpha = Math.min(1, t * 1.4);
       ctx.fillStyle = p.hue;
       ctx.beginPath();
-      ctx.arc(x, y, p.size * this.scale * t, 0, TAU);
+      ctx.ellipse(x, y, r, r * 0.78, p.x * 0.7, 0, TAU);
       ctx.fill();
     }
     ctx.globalAlpha = 1;
   }
 
-  private drawFloats(ctx: CanvasRenderingContext2D, world: World): void {
+  private drawFloats(world: World): void {
     if (world.floats.length === 0) return;
+    const ctx = this.ctx;
     ctx.save();
     ctx.textAlign = "center";
-    ctx.font = `700 ${Math.round(this.scale * 2.6)}px system-ui, -apple-system, sans-serif`;
+    ctx.font = `900 ${Math.round(this.scale * 3.4)}px Impact, "Haettenschweiler", "Arial Narrow", system-ui, sans-serif`;
+    ctx.lineJoin = "round";
     for (const f of world.floats) {
       const t = f.life / f.maxLife;
+      const x = this.toScreenX(f.x);
+      const y = this.toScreenY(f.y);
       ctx.globalAlpha = Math.min(1, t * 1.6);
+      // Key-plate outline under the ink, the way display type is trapped in a two-colour print.
+      ctx.strokeStyle = INK_KEY;
+      ctx.lineWidth = Math.max(3, this.scale * 0.42);
+      ctx.strokeText(f.text, x, y);
       ctx.fillStyle = f.hue;
-      ctx.fillText(f.text, this.toScreenX(f.x), this.toScreenY(f.y));
+      ctx.fillText(f.text, x, y);
     }
     ctx.restore();
+  }
+
+  /**
+   * Full-page passes that sit over the artwork: the grain that makes it paper, and the
+   * flashes that make an impact land. Called after the mechanic overlay.
+   */
+  drawPostFx(world: World): void {
+    const ctx = this.ctx;
+
+    if (world.absorbFlash > 0.001) {
+      // A slammed ink pass across the whole page. Reads as the press coming down hard.
+      ctx.save();
+      ctx.globalCompositeOperation = "multiply";
+      ctx.globalAlpha = world.absorbFlash * 0.3;
+      ctx.fillStyle = world.absorbFlashInk;
+      ctx.fillRect(0, 0, this.cw, this.ch);
+      ctx.restore();
+    }
+
+    if (world.hitFlash > 0.001) {
+      ctx.save();
+      ctx.globalCompositeOperation = "multiply";
+      ctx.globalAlpha = world.hitFlash * 0.42;
+      ctx.fillStyle = INK_RED;
+      ctx.fillRect(0, 0, this.cw, this.ch);
+      ctx.restore();
+    }
+
   }
 }

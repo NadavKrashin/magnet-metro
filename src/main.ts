@@ -3,12 +3,15 @@ import { Input } from "./core/input";
 import { Loop } from "./core/loop";
 import { Rng, randomCode, seedFromCode } from "./core/rng";
 import { Renderer } from "./render/renderer";
+import { GameAudio } from "./audio/audio";
+import { makeGrainTile } from "./render/texture";
 import { COURSE_LENGTH, MAX_INTEGRITY, VIEW_WIDTH, World } from "./game/world";
 import type { Mechanic } from "./mechanics/types";
 import { PolarityMechanic } from "./mechanics/polarity";
 import { OverloadMechanic } from "./mechanics/overload";
 
 const RUNS_KEY = "mm_runs_v1";
+const MUTE_KEY = "mm_muted_v1";
 
 interface RunRecord {
   mechanic: string;
@@ -53,6 +56,7 @@ type State = "menu" | "playing" | "results";
 class Game {
   private renderer: Renderer;
   private input = new Input();
+  private audio = new GameAudio();
   private loop: Loop;
   // Tether is parked, not deleted. The balance harness showed it barely responds to skill
   // (+87% from a good bot against +1000% for the others) and the first player could not tell
@@ -75,6 +79,7 @@ class Game {
   private menuEl = el("menu");
   private resultsEl = el("results");
   private seedInput = el<HTMLInputElement>("seed-input");
+  private muteEl = el<HTMLButtonElement>("mute");
 
   constructor() {
     const canvas = el<HTMLCanvasElement>("game");
@@ -87,6 +92,14 @@ class Game {
     this.buildMenu();
     this.seedInput.value = this.seedCode;
 
+    // Browsers will not start audio without a gesture, so every entry point unlocks it.
+    canvas.addEventListener("pointerdown", () => this.audio.unlock(), { passive: true });
+    this.applyMute(localStorage.getItem(MUTE_KEY) === "1");
+    this.muteEl.addEventListener("click", () => {
+      this.audio.unlock();
+      this.applyMute(!this.audio.muted);
+    });
+
     el("btn-retry").addEventListener("click", () => this.startRun());
     el("btn-menu").addEventListener("click", () => this.showMenu());
     this.seedInput.addEventListener("change", () => {
@@ -94,6 +107,10 @@ class Game {
       this.seedCode = v.length > 0 ? v : randomCode(new Rng(Date.now() >>> 0));
       this.seedInput.value = this.seedCode;
     });
+
+    // Paper grain is a static overlay, so the browser's compositor can blend it once rather
+    // than the canvas re-filling a full-screen multiply pattern sixty times a second.
+    el("grain").style.backgroundImage = `url(${makeGrainTile().toDataURL()})`;
 
     window.addEventListener("resize", this.onResize);
     this.onResize();
@@ -104,6 +121,17 @@ class Game {
     this.renderer.resize();
     this.world.setViewHeight(this.renderer.viewHeightWorld);
   };
+
+  private applyMute(muted: boolean): void {
+    this.audio.setMuted(muted);
+    this.muteEl.textContent = muted ? "SOUND OFF" : "SOUND ON";
+    this.muteEl.classList.toggle("off", muted);
+    try {
+      localStorage.setItem(MUTE_KEY, muted ? "1" : "0");
+    } catch {
+      // Storage unavailable. The toggle still works for this session.
+    }
+  }
 
   private buildIntegrity(): void {
     this.integrityEl.innerHTML = "";
@@ -148,6 +176,16 @@ class Game {
     this.input.reset();
     this.state = "playing";
 
+    this.audio.unlock();
+    this.audio.setIntensity(0);
+    this.audio.startMusic();
+    this.world.events = {
+      onCollect: (comboIndex) => this.audio.collect(comboIndex),
+      onAbsorb: () => this.audio.absorb(),
+      onHit: () => this.audio.hit(),
+      onFlip: (toRed) => this.audio.flip(toRed),
+    };
+
     this.menuEl.classList.add("hidden");
     this.resultsEl.classList.add("hidden");
     this.hud.classList.remove("hidden");
@@ -164,6 +202,8 @@ class Game {
   private endRun(): void {
     this.state = "results";
     const w = this.world;
+    this.audio.stopMusic();
+    this.audio.finish(w.phase === "won");
     const record: RunRecord = {
       mechanic: this.active.id,
       score: w.score,
@@ -269,6 +309,9 @@ class Game {
     this.hintEl.textContent = w.prompt;
     this.hintEl.classList.toggle("on", w.prompt.length > 0);
     this.hintEl.classList.toggle("urgent", w.promptUrgent);
+
+    // The soundtrack is driven by how the run is going, not by a clock.
+    this.audio.setIntensity(0.35 * w.progress + 0.65 * Math.min(1, w.combo / 40));
 
     const pol = w.field.polarity;
     this.chargeEl.classList.toggle("hidden", pol === 0);

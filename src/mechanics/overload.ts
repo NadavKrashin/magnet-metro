@@ -2,6 +2,7 @@ import type { InputState } from "../core/input";
 import type { View } from "../render/view";
 import { OPENING_LENGTH, type World } from "../game/world";
 import { TAU, clamp, lerp } from "../core/math";
+import { INK_KEY, INK_RED } from "../render/palette";
 import { steer, type Mechanic } from "./types";
 
 const CHARGE_TIME = 0.85;
@@ -51,7 +52,11 @@ export class OverloadMechanic implements Mechanic {
         this.pulseTimer = PULSE_DURATION;
         world.stats.actions += 1;
         world.shake = Math.min(world.shake + this.charge * 1.2, 2.2);
-        world.burst(world.player.x, world.player.y, 8 + Math.floor(this.charge * 18), "#ffd257");
+        world.burst(world.player.x, world.player.y, 10 + Math.floor(this.charge * 20), INK_RED);
+        world.hitStop = Math.max(world.hitStop, 0.05 * this.charge);
+        world.absorbFlash = this.charge;
+        world.absorbFlashInk = INK_RED;
+        world.events?.onAbsorb();
       }
       this.charge = 0;
     }
@@ -102,9 +107,10 @@ export class OverloadMechanic implements Mechanic {
     const cy = view.toScreenY(world.player.y);
 
     ctx.save();
+    ctx.globalCompositeOperation = "multiply";
     // Current field reach.
-    ctx.strokeStyle = this.pulseTimer > 0 ? "#ffd257" : "#8ad7ff";
-    ctx.globalAlpha = 0.18;
+    ctx.strokeStyle = this.pulseTimer > 0 ? INK_RED : INK_KEY;
+    ctx.globalAlpha = 0.4;
     ctx.lineWidth = Math.max(1, view.scale * 0.16);
     ctx.beginPath();
     ctx.arc(cx, cy, world.field.radius * view.scale, 0, TAU);
@@ -113,7 +119,7 @@ export class OverloadMechanic implements Mechanic {
     // Charge meter drawn as an arc around the drone: readable without looking away.
     if (this.charge > 0.02) {
       ctx.globalAlpha = 0.95;
-      ctx.strokeStyle = this.charge >= 1 ? "#ffd257" : "#ff9d4d";
+      ctx.strokeStyle = this.charge >= 1 ? INK_RED : INK_KEY;
       ctx.lineWidth = Math.max(2, view.scale * 0.5);
       ctx.beginPath();
       ctx.arc(cx, cy, world.player.r * 2.1 * view.scale, -Math.PI / 2, -Math.PI / 2 + TAU * this.charge);
@@ -124,7 +130,7 @@ export class OverloadMechanic implements Mechanic {
     if (this.pulseTimer > 0) {
       const t = 1 - this.pulseTimer / PULSE_DURATION;
       ctx.globalAlpha = (1 - t) * 0.8;
-      ctx.strokeStyle = "#ffd257";
+      ctx.strokeStyle = INK_RED;
       ctx.lineWidth = Math.max(1, view.scale * 0.5 * (1 - t));
       ctx.beginPath();
       ctx.arc(cx, cy, lerp(PULSE_MIN_RADIUS, PULSE_MAX_RADIUS, this.pulsePower) * t * view.scale, 0, TAU);

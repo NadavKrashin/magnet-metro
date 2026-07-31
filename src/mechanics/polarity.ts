@@ -3,6 +3,7 @@ import type { View } from "../render/view";
 import { OPENING_LENGTH, type World } from "../game/world";
 import type { Polarity } from "../game/types";
 import { TAU } from "../core/math";
+import { inkFor } from "../render/palette";
 import { steer, type Mechanic } from "./types";
 
 const FIELD_RADIUS = 15;
@@ -40,12 +41,8 @@ export class PolarityMechanic implements Mechanic {
       this.polarity = this.polarity === 1 ? -1 : 1;
       this.flipRing = FLIP_RING_DURATION;
       world.stats.actions += 1;
-      world.burst(
-        world.player.x,
-        world.player.y,
-        10,
-        this.polarity === 1 ? "#5cc8ff" : "#ff5d6c",
-      );
+      world.burst(world.player.x, world.player.y, 12, inkFor(this.polarity));
+      world.events?.onFlip(this.polarity === -1);
     }
     this.flipRing = Math.max(0, this.flipRing - dt);
 
@@ -97,24 +94,29 @@ export class PolarityMechanic implements Mechanic {
   draw(ctx: CanvasRenderingContext2D, world: World, view: View): void {
     const cx = view.toScreenX(world.player.x);
     const cy = view.toScreenY(world.player.y);
-    const color = this.polarity === 1 ? "#5cc8ff" : "#ff5d6c";
+    const ink = inkFor(this.polarity);
 
-    // The field boundary, so the player can judge reach without guessing.
     ctx.save();
-    ctx.strokeStyle = color;
-    ctx.globalAlpha = 0.16;
-    ctx.lineWidth = Math.max(1, view.scale * 0.16);
+    ctx.globalCompositeOperation = "multiply";
+
+    // Field reach, drawn as a printed dashed rule rather than a glow. A press cannot make
+    // light, so range is shown with a mark.
+    ctx.strokeStyle = ink;
+    ctx.globalAlpha = 0.4;
+    ctx.lineWidth = Math.max(1, view.scale * 0.11);
+    ctx.setLineDash([view.scale * 0.9, view.scale * 0.9]);
     ctx.beginPath();
     ctx.arc(cx, cy, FIELD_RADIUS * view.scale, 0, TAU);
     ctx.stroke();
+    ctx.setLineDash([]);
 
-    // A ring that snaps outward on each flip: the tap needs to feel like it did something.
+    // A ring stamped outward on each flip: the tap has to feel like it did something.
     if (this.flipRing > 0) {
       const t = 1 - this.flipRing / FLIP_RING_DURATION;
-      ctx.globalAlpha = (1 - t) * 0.85;
-      ctx.lineWidth = Math.max(1, view.scale * 0.4 * (1 - t));
+      ctx.globalAlpha = (1 - t) * 0.9;
+      ctx.lineWidth = Math.max(1.5, view.scale * 0.5 * (1 - t));
       ctx.beginPath();
-      ctx.arc(cx, cy, (4 + t * FIELD_RADIUS * 1.5) * view.scale, 0, TAU);
+      ctx.arc(cx, cy, (4 + t * FIELD_RADIUS * 1.6) * view.scale, 0, TAU);
       ctx.stroke();
     }
     ctx.restore();

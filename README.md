@@ -99,6 +99,53 @@ their first run, and the bots are nowhere near that. Some of that gap is the bot
 worse than a person, but not all of it, and the honest next step is human play rather than
 another round of tuning against a robot.
 
+## Art direction: two-colour screenprint
+
+The game is drawn as ink on paper, not light on black. That one decision drives everything:
+there is no glow anywhere, because ink does not emit. Emphasis comes from solid ink against
+bare paper, a heavy black key plate, and overprint where the two inks cross.
+
+- **Stock** is warm uncoated paper, with a grain tile blended over the whole page.
+- **Two inks only** — a deep printed blue and a hot vermilion — laid down with `multiply`
+  blending, so overlapping pieces darken into a third colour the way real overprint does.
+- **Everything misregisters** by a fraction of a line weight. Perfectly aligned plates read as
+  vector clip art; a hair of offset reads as something physically printed.
+- **Knockouts**, not highlights: holes are made by printing the paper colour back over ink.
+- **Speed is hatching**, not blur — irregular marks crowding the edges of the frame, which is
+  how a printed page has always conveyed motion.
+- **Type** is Impact, the closest thing to a poster-weight condensed face that is present on
+  effectively every device without shipping a webfont.
+
+The interface follows the same rules: flat ink, hard keylines, square corners, and solid
+offset shadows standing in for a second pass slightly out of register.
+
+## Sound
+
+Entirely synthesised in WebAudio at runtime, so it adds nothing to the download and there is
+nothing to load before the first run.
+
+The music is not a loop playing underneath the game — tempo, layers and filter brightness are
+driven by the player's combo. Hats enter once they have something going, and the lead only
+arrives on a strong combo, so the soundtrack builds as they build and thins out when they get
+hit. Collection blips climb a pentatonic ladder as the combo rises. That coupling between
+performance and score is most of why an arcade game feels exciting.
+
+## Performance
+
+The print look is composite-heavy, so it was profiled rather than assumed. Frame time in a
+software renderer went from 131 ms to 34 ms through three changes:
+
+1. Paper grain moved from a full-screen canvas `multiply` fill every frame to a static CSS
+   overlay the compositor blends once.
+2. The stock, shaded margins, lane rules and registration marks are baked into an offscreen
+   sheet at resize and blitted, since none of them move.
+3. Device pixel ratio capped at 2.
+
+`node scripts/shoot.mjs` renders the built game in a headless phone-sized browser, plays it
+with a scripted thumb, reports frame time, and fails on any runtime error. It catches the
+class of bug unit tests never see: a canvas call that throws, a missing element, a composite
+mode that silently blanks the page.
+
 ## Architecture
 
 Simulation is kept separate from presentation so a run can be replayed from a seed and scored

@@ -19,6 +19,7 @@
   "devDependencies": {
     "@capacitor/cli": "^8.4.2",
     "@types/node": "^22.20.1",
+    "playwright": "^1.62.1",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "vite": "^6.0.5"

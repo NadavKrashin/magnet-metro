@@ -6,7 +6,7 @@
       name="viewport"
       content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, user-scalable=no"
     />
-    <meta name="theme-color" content="#080d18" />
+    <meta name="theme-color" content="#ede7d6" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>Magnet Metro — mechanic test</title>
@@ -14,6 +14,8 @@
   <body>
     <div id="app">
       <canvas id="game"></canvas>
+      <div id="grain" class="grain" aria-hidden="true"></div>
+      <button id="mute" class="mute" type="button">SOUND ON</button>
 
       <div id="hud" class="hidden">
         <div class="hud-top">
@@ -37,7 +39,7 @@
           <p class="sub">
             Two control schemes, one game. Same course, same scoring, same art — the only
             difference is what your thumb does. The opening 20 seconds of every run teach you
-            the rule by making you use it.
+            the rule by making you use it. Sound on is strongly recommended.
           </p>
           <div id="mechanic-list" class="mechanics"></div>
           <label class="seed-row">

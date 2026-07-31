@@ -1,4 +1,5 @@
 import { Rng } from "../core/rng";
+import { INK_BLUE, INK_KEY, INK_RED } from "../render/palette";
 import { clamp, circlesHit, damp, dist, smoothstep } from "../core/math";
 import type {
   Anchor,
@@ -23,8 +24,10 @@ export const COURSE_LENGTH = 1500;
 export const BASE_SPEED = 34;
 export const MAX_INTEGRITY = 3;
 
-const CHAIN_SPACING = 2.1;
-const CHAIN_VISUAL_CAP = 70;
+const CHAIN_SPACING = 1.55;
+const CHAIN_VISUAL_CAP = 90;
+/** Links added to the tail for each hazard swallowed. Bulk should look like bulk. */
+const CHAIN_PER_ABSORB = 5;
 const INVULN_AFTER_HIT = 1.1;
 const COMBO_PER_STEP = 8;
 const COMBO_MAX_MULT = 8;
@@ -33,7 +36,24 @@ const DRIFT_SPEED = 1.4;
 /** Course distance given over to the scripted teaching sequence. */
 export const OPENING_LENGTH = 290;
 /** Absorbing a matching hazard is worth this much before the combo multiplier. */
-const HAZARD_ABSORB_VALUE = 4;
+const HAZARD_ABSORB_VALUE = 60;
+/** Base worth of an ordinary piece. Deliberately not 1: a score that climbs in tens reads as
+ *  progress, and a score that climbs in ones reads as nothing happening. */
+const SCRAP_VALUE = 10;
+/** The oversized pieces. */
+const BIG_VALUE = 50;
+
+/**
+ * Hooks the presentation layer subscribes to. The simulation stays free of any dependency on
+ * audio or DOM, which is what keeps it runnable headlessly in the tests and the balance
+ * harness — those simply leave this null.
+ */
+export interface WorldEvents {
+  onCollect(comboIndex: number): void;
+  onAbsorb(): void;
+  onHit(): void;
+  onFlip(toRed: boolean): void;
+}
 
 export interface WorldOptions {
   /** Spawn tether anchors. Only the tether mechanic uses them. */
@@ -80,6 +100,16 @@ export class World {
   prompt = "";
   /** Set when the prompt is asking for an action right now, so the HUD can pulse it. */
   promptUrgent = false;
+  /** Full-page ink slam on a big moment, and which ink to slam. */
+  absorbFlash = 0;
+  absorbFlashInk = "#0F5FBF";
+  /**
+   * Seconds of near-frozen time after a big impact. A brief hitch is the cheapest way to make
+   * a hit land — the eye reads the pause as weight.
+   */
+  hitStop = 0;
+
+  events: WorldEvents | null = null;
 
   stats: RunStats = {
     collected: 0,
@@ -119,6 +149,12 @@ export class World {
       return;
     }
 
+    // Time hitch. Deterministic, so a seeded replay still matches exactly.
+    if (this.hitStop > 0) {
+      this.hitStop -= dt;
+      dt *= 0.22;
+    }
+
     this.elapsed += dt;
     this.stats.duration = this.elapsed;
 
@@ -139,8 +175,10 @@ export class World {
 
   private movePlayer(dt: number): void {
     const p = this.player;
-    // Speed ramps modestly across the course so the climax feels faster than the opening.
-    p.speed = BASE_SPEED * (1 + 0.35 * smoothstep(0.1, 1, this.progress));
+    // Speed climbs hard across the course. A 35% ramp was imperceptible; at 90% the last ten
+    // seconds genuinely feel like a different game from the first ten, which is the build the
+    // run was missing.
+    p.speed = BASE_SPEED * (1 + 0.9 * smoothstep(0.05, 1, this.progress));
 
     const prevX = p.x;
     const prevY = p.y;
@@ -278,9 +316,10 @@ export class World {
 
     // Colour carries one meaning only: which charge the item is. Value is carried by size,
     // so the player never has to decode two different rules from the same visual channel.
-    const color = s.polarity === -1 ? "#ff5d6c" : s.polarity === 1 ? "#5cc8ff" : "#9fb4cc";
-    this.burst(s.x, s.y, s.value >= 5 ? 14 : 6, color);
-    if (s.value >= 5) this.float(s.x, s.y, `+${gained}`, color);
+    const color = s.polarity === -1 ? INK_RED : s.polarity === 1 ? INK_BLUE : INK_KEY;
+    this.burst(s.x, s.y, s.value >= BIG_VALUE ? 16 : 7, color);
+    if (s.value >= BIG_VALUE) this.float(s.x, s.y, `+${gained}`, color);
+    this.events?.onCollect(this.combo - 1);
   }
 
   /**
@@ -295,12 +334,26 @@ export class World {
 
     const gained = HAZARD_ABSORB_VALUE * this.multiplier;
     this.score += gained;
+    this.stats.collected += 1;
     this.collectPulse = 1;
-    this.shake = Math.min(this.shake + 0.35, 2);
 
-    const color = h.polarity === -1 ? "#ff5d6c" : "#5cc8ff";
-    this.burst(h.x, h.y, 18, color);
+    // The whole reason to change colour, so it gets the full treatment: a shove, a freeze,
+    // and an ink slam across the page.
+    this.shake = Math.min(this.shake + 1.1, 2.6);
+    this.hitStop = Math.max(this.hitStop, 0.075);
+    this.absorbFlash = 1;
+    this.absorbFlashInk = h.polarity === -1 ? INK_RED : INK_BLUE;
+
+    // A hazard is bulk, not a pellet. Dumping several links into the tail at once is what
+    // turns eating a wall into visible, sudden growth rather than a slightly bigger number.
+    for (let i = 0; i < CHAIN_PER_ABSORB; i++) {
+      this.chain.push({ x: h.x, y: h.y, r: 1.5, polarity: h.polarity, value: 1 });
+    }
+
+    const color = h.polarity === -1 ? INK_RED : INK_BLUE;
+    this.burst(h.x, h.y, 26, color);
     this.float(h.x, h.y, `+${gained}`, color);
+    this.events?.onAbsorb();
   }
 
   private takeHit(h: Hazard): void {
@@ -308,18 +361,20 @@ export class World {
     this.stats.hits += 1;
     this.combo = 0;
     this.invulnTimer = INVULN_AFTER_HIT;
-    this.shake = Math.min(this.shake + 1.6, 2.6);
+    this.shake = Math.min(this.shake + 1.8, 2.8);
     this.hitFlash = 1;
+    this.hitStop = Math.max(this.hitStop, 0.11);
 
     // Losing part of the chain is the visible cost — the player watches their haul scatter.
     const lost = Math.ceil(this.chain.length * 0.35);
     for (let i = 0; i < lost; i++) {
       const item = this.chain.pop();
       if (!item) break;
-      this.burst(item.x, item.y, 4, "#8b97a8");
+      this.burst(item.x, item.y, 4, INK_KEY);
     }
-    this.burst(h.x, h.y, 20, "#ff5d6c");
-    this.float(this.player.x, this.player.y + 4, "-" + lost, "#ff5d6c");
+    this.burst(h.x, h.y, 22, INK_RED);
+    this.float(this.player.x, this.player.y + 4, "-" + lost, INK_RED);
+    this.events?.onHit();
   }
 
   private updateChain(): void {
@@ -328,8 +383,11 @@ export class World {
       const behind = (i + 1) * CHAIN_SPACING;
       const pt = this.sampleTrail(this.travelled - behind);
       const item = this.chain[i]!;
-      item.x = pt.x;
-      item.y = pt.y;
+      // Braid the links off the centre line. A single-file trail reads as a wire; an
+      // undulating band reads as a mass, which is what makes a long chain a spectacle.
+      const spread = Math.min(2.8, 0.6 + visible * 0.045);
+      item.x = pt.x + Math.sin(i * 0.3) * spread;
+      item.y = pt.y + Math.cos(i * 0.3) * spread * 0.3;
     }
   }
 
@@ -371,6 +429,7 @@ export class World {
     this.shake = Math.max(0, this.shake - dt * 4.5);
     this.collectPulse = Math.max(0, this.collectPulse - dt * 4);
     this.hitFlash = Math.max(0, this.hitFlash - dt * 2.5);
+    this.absorbFlash = Math.max(0, this.absorbFlash - dt * 4.5);
 
     for (let i = this.particles.length - 1; i >= 0; i--) {
       const p = this.particles[i]!;
@@ -524,7 +583,7 @@ export class World {
   /** A vertical run of same-colour scrap. The clearest possible read of "these belong together". */
   private scrapLine(y: number, x: number, pol: Polarity, count: number): void {
     for (let i = 0; i < count; i++) {
-      this.addScrap(clamp(x, -TRACK_HALF + 2, TRACK_HALF - 2), y + i * 5.5, pol, 1);
+      this.addScrap(clamp(x, -TRACK_HALF + 2, TRACK_HALF - 2), y + i * 5.5, pol, SCRAP_VALUE);
     }
   }
 
@@ -542,7 +601,7 @@ export class World {
         clamp(cx + Math.sin(f * Math.PI) * spread * dir, -TRACK_HALF + 2, TRACK_HALF - 2),
         y + f * 26,
         pol,
-        1,
+        SCRAP_VALUE,
       );
     }
   }
@@ -556,8 +615,8 @@ export class World {
 
     for (let i = 0; i < 6; i++) {
       const yy = y + i * 5;
-      this.addScrap(-15, yy, leftPol, gold && goldSide === -1 && i === 3 ? 5 : 1);
-      this.addScrap(15, yy, rightPol, gold && goldSide === 1 && i === 3 ? 5 : 1);
+      this.addScrap(-15, yy, leftPol, gold && goldSide === -1 && i === 3 ? BIG_VALUE : SCRAP_VALUE);
+      this.addScrap(15, yy, rightPol, gold && goldSide === 1 && i === 3 ? BIG_VALUE : SCRAP_VALUE);
     }
     // A mine on the centre line so drifting between the two lanes is not free.
     this.addHazard(0, y + 14, "mine", this.randomCharge(), 0);
@@ -577,7 +636,7 @@ export class World {
       if (Math.abs(x - gapCenter) < gapWidth) continue;
       this.addHazard(x, y, "block", wallPol, 0);
     }
-    this.scrapArc(y + 16, gapCenter, 6, this.randomCharge(), 10);
+    this.scrapArc(y + 16, gapCenter, 9, this.randomCharge(), 10);
   }
 
   /** Anchors to swing around, ringed with reward that is only reachable on the arc. */
@@ -594,7 +653,7 @@ export class World {
         clamp(ax + Math.cos(a) * ringR, -TRACK_HALF + 2, TRACK_HALF - 2),
         y + 10 + Math.sin(a) * ringR,
         0,
-        1,
+        SCRAP_VALUE,
       );
     }
     this.addHazard(-side * this.rng.range(8, 18), y + 26, "mine", 0, 6);
@@ -603,14 +662,14 @@ export class World {
   /** A dense blob of mixed charges — tests whether the player can pick a side under pressure. */
   private cluster(y: number, hard: number): void {
     const cx = this.rng.range(-16, 16);
-    const n = 10 + Math.floor(hard * 6);
+    const n = 16 + Math.floor(hard * 10);
     const pol = this.randomCharge();
     for (let i = 0; i < n; i++) {
       this.addScrap(
         clamp(cx + this.rng.range(-11, 11), -TRACK_HALF + 2, TRACK_HALF - 2),
         y + this.rng.range(0, 24),
         this.rng.chance(0.78) ? pol : this.randomCharge(),
-        this.rng.chance(0.08) ? 5 : 1,
+        this.rng.chance(0.1) ? BIG_VALUE : SCRAP_VALUE,
       );
     }
     if (hard > 0.45) {
@@ -635,7 +694,7 @@ export class World {
 
   /** A deliberate quiet beat with one high-value pickup. Pacing needs air. */
   private breather(y: number): void {
-    this.addScrap(this.rng.range(-12, 12), y + 12, this.randomCharge(), 5);
+    this.addScrap(this.rng.range(-12, 12), y + 12, this.randomCharge(), BIG_VALUE);
   }
 
   private addScrap(x: number, y: number, polarity: Polarity, value: number): void {
@@ -643,7 +702,7 @@ export class World {
       x,
       y,
       // Size is the value channel: a big piece is obviously worth more than a small one.
-      r: value >= 5 ? 2.3 : 1.2,
+      r: value >= BIG_VALUE ? 2.5 : 1.35,
       vx: 0,
       vy: 0,
       polarity,
