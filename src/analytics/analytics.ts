@@ -11,6 +11,7 @@
  *   - Every ad event carries its placement, so revenue can be attributed to a spot in the game
  *     rather than to a format in aggregate.
  */
+import { storage } from "../game/storage";
 
 export type EventName =
   // Lifecycle
@@ -79,10 +80,10 @@ export class Analytics {
   start(): void {
     let isFirst = false;
     try {
-      isFirst = !localStorage.getItem(FIRST_OPEN_KEY);
-      if (isFirst) localStorage.setItem(FIRST_OPEN_KEY, String(Date.now()));
-      const count = Number(localStorage.getItem(SESSION_KEY) ?? 0) + 1;
-      localStorage.setItem(SESSION_KEY, String(count));
+      isFirst = !storage.getItem(FIRST_OPEN_KEY);
+      if (isFirst) storage.setItem(FIRST_OPEN_KEY, String(Date.now()));
+      const count = Number(storage.getItem(SESSION_KEY) ?? 0) + 1;
+      storage.setItem(SESSION_KEY, String(count));
       if (isFirst) this.track("first_open", {});
       this.track("session_start", { sessionNumber: count });
     } catch {

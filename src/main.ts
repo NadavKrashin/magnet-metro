@@ -28,6 +28,7 @@ import {
   type SaveData,
 } from "./game/progression";
 import { applyEdition } from "./render/palette";
+import { STORAGE_KEYS, storage } from "./game/storage";
 import { Analytics, DebugSink } from "./analytics/analytics";
 import { AdsService } from "./ads/ads";
 import { REWARD } from "./ads/config";
@@ -58,7 +59,7 @@ function el<T extends HTMLElement>(id: string): T {
 
 function loadRuns(): RunRecord[] {
   try {
-    const raw = localStorage.getItem(RUNS_KEY);
+    const raw = storage.getItem(RUNS_KEY);
     if (!raw) return [];
     const parsed: unknown = JSON.parse(raw);
     return Array.isArray(parsed) ? (parsed as RunRecord[]) : [];
@@ -69,7 +70,7 @@ function loadRuns(): RunRecord[] {
 
 function saveRuns(runs: RunRecord[]): void {
   try {
-    localStorage.setItem(RUNS_KEY, JSON.stringify(runs.slice(-200)));
+    storage.setItem(RUNS_KEY, JSON.stringify(runs.slice(-200)));
   } catch {
     // Private browsing or a full quota. Losing the log is not worth breaking the game over.
   }
@@ -146,7 +147,7 @@ class Game {
 
     // Browsers will not start audio without a gesture, so every entry point unlocks it.
     canvas.addEventListener("pointerdown", () => this.audio.unlock(), { passive: true });
-    this.applyMute(localStorage.getItem(MUTE_KEY) === "1");
+    this.applyMute(storage.getItem(MUTE_KEY) === "1");
     const toggleSound = () => {
       this.audio.unlock();
       this.applyMute(!this.audio.muted);
@@ -237,9 +238,9 @@ class Game {
     this.soundEl.textContent = muted ? "Sound off" : "Sound on";
     this.soundEl.classList.toggle("off", muted);
     try {
-      localStorage.setItem(MUTE_KEY, muted ? "1" : "0");
+      storage.setItem(MUTE_KEY, muted ? "1" : "0");
     } catch {
-      // Storage unavailable. The toggle still works for this session.
+      // Nothing to recover from; the toggle still works for this session.
     }
   }
 
@@ -831,4 +832,13 @@ class Game {
   };
 }
 
-new Game();
+/**
+ * Progress has to be read out of durable storage before anything constructs a save, otherwise
+ * a returning player would be handed a blank one and their levels would appear to be gone.
+ */
+async function boot(): Promise<void> {
+  await storage.hydrate([...STORAGE_KEYS]);
+  new Game();
+}
+
+void boot();

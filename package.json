@@ -16,7 +16,8 @@
     "android": "npm run sync && npx cap open android",
     "ios": "npm run sync && npx cap open ios",
     "capture": "npm run standalone && node scripts/capture.mjs",
-    "icons": "node scripts/icon.mjs && npx capacitor-assets generate --iconBackgroundColor '#EDE7D6' --iconBackgroundColorDark '#EDE7D6' --splashBackgroundColor '#EDE7D6' --splashBackgroundColorDark '#EDE7D6'"
+    "icons": "node scripts/icon.mjs && npx capacitor-assets generate --iconBackgroundColor '#EDE7D6' --iconBackgroundColorDark '#EDE7D6' --splashBackgroundColor '#EDE7D6' --splashBackgroundColorDark '#EDE7D6'",
+    "verify": "npm run standalone && node scripts/persist-check.mjs && node scripts/shoot.mjs"
   },
   "devDependencies": {
     "@capacitor/assets": "^3.0.5",
@@ -31,6 +32,7 @@
     "@capacitor-community/admob": "^8.0.0",
     "@capacitor/android": "^8.4.2",
     "@capacitor/core": "^8.4.2",
-    "@capacitor/ios": "^8.4.2"
+    "@capacitor/ios": "^8.4.2",
+    "@capacitor/preferences": "^8.0.1"
   }
 }

@@ -274,6 +274,40 @@ with a scripted thumb, reports frame time, and fails on any runtime error. It ca
 class of bug unit tests never see: a canvas call that throws, a missing element, a composite
 mode that silently blanks the page.
 
+## Where progress is stored
+
+All of it lives in one place: `src/game/storage.ts`, under five keys.
+
+| Key | Holds |
+|---|---|
+| `mm_save_v2` | Scrap, lifetime scrap, upgrades, owned and equipped editions, **levels completed**, daily best, contracts |
+| `mm_runs_v1` | The last 200 run records |
+| `mm_muted_v1` | Sound preference |
+| `mm_session_v1`, `mm_first_open_v1` | Session counters for analytics |
+
+On device this writes through to **Capacitor Preferences** — NSUserDefaults on iOS,
+SharedPreferences on Android. On the web it uses `localStorage`, which is all there is.
+
+That distinction matters more than it looks. A WKWebView's `localStorage` is the *least*
+durable store an iOS app has: the system may evict it when the device is short on space, and
+"Offload App" clears it outright. A player losing twelve levels and a maxed workshop to an OS
+housekeeping pass would be an unrecoverable bug they could never explain, and it would look
+like the game had simply forgotten them.
+
+The Preferences API is async while the game's save and load calls are synchronous, so every
+key is hydrated into an in-memory cache once at boot, before any save object is constructed.
+Reads come from the cache; writes update it immediately and the durable store in the
+background. Anyone who played an older build is migrated on first launch, because hydrate
+falls back to `localStorage` and writes anything it finds there through to Preferences.
+
+`node scripts/persist-check.mjs` proves the round trip in a real browser: it writes a save,
+reloads, and asserts the scrap, the level progress and the equipped edition all come back.
+Getting the boot order wrong here fails silently and severely — the game would build a blank
+save before the real one loaded — so it is not something to verify by reading the code.
+
+**Still device-local.** There is no account and no cloud sync: reinstalling, or moving to a new
+phone, starts from zero. See the note in the roadmap below before adding purchases.
+
 ## Architecture
 
 Simulation is kept separate from presentation so a run can be replayed from a seed and scored

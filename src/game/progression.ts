@@ -10,6 +10,8 @@
  * their time rather than a reward for it.
  */
 
+import { storage } from "./storage";
+
 const SAVE_KEY = "mm_save_v2";
 
 /**
@@ -418,7 +420,7 @@ function emptySave(): SaveData {
 
 export function loadSave(): SaveData {
   try {
-    const raw = localStorage.getItem(SAVE_KEY);
+    const raw = storage.getItem(SAVE_KEY);
     if (!raw) return emptySave();
     const parsed = JSON.parse(raw) as Partial<SaveData>;
     const base = emptySave();
@@ -442,9 +444,10 @@ export function loadSave(): SaveData {
 
 export function saveSave(data: SaveData): void {
   try {
-    localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+    storage.setItem(SAVE_KEY, JSON.stringify(data));
   } catch {
-    // Storage unavailable. Progression is lost on reload, but the game still plays.
+    // Serialisation failed, which should not happen. The in-memory save still stands for
+    // this session, so the run the player just finished is not thrown away in front of them.
   }
 }
 
