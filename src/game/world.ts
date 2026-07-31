@@ -32,6 +32,8 @@ const COMBO_MAX_MULT = 8;
 const DRIFT_SPEED = 1.4;
 /** Wrong-polarity hazards are only dragged in from this fraction of the field radius. */
 const HAZARD_PULL_RADIUS_FACTOR = 0.6;
+/** Course distance given over to the scripted, hazard-free teaching sequence. */
+export const OPENING_LENGTH = 210;
 
 export interface WorldOptions {
   /** Spawn tether anchors. Only the tether mechanic uses them. */
@@ -74,6 +76,10 @@ export class World {
   /** Pulses to 1 on collect and decays; the renderer uses it for the "juice" scale-up. */
   collectPulse = 0;
   hitFlash = 0;
+  /** Contextual instruction shown by the HUD. Written by the active mechanic each frame. */
+  prompt = "";
+  /** Set when the prompt is asking for an action right now, so the HUD can pulse it. */
+  promptUrgent = false;
 
   stats: RunStats = {
     collected: 0,
@@ -250,7 +256,9 @@ export class World {
 
     this.chain.push({ x: s.x, y: s.y, r: s.r, polarity: s.polarity, value: s.value });
 
-    const color = s.value >= 5 ? "#ffd257" : s.polarity === -1 ? "#ff5d6c" : "#5cc8ff";
+    // Colour carries one meaning only: which charge the item is. Value is carried by size,
+    // so the player never has to decode two different rules from the same visual channel.
+    const color = s.polarity === -1 ? "#ff5d6c" : s.polarity === 1 ? "#5cc8ff" : "#9fb4cc";
     this.burst(s.x, s.y, s.value >= 5 ? 14 : 6, color);
     if (s.value >= 5) this.float(s.x, s.y, `+${gained}`, color);
   }
@@ -385,13 +393,7 @@ export class World {
     const t = clamp(y / COURSE_LENGTH, 0, 1);
     const rng = this.rng;
 
-    // The opening stretch is deliberately hazard-free. First-run completion is the single
-    // metric everything else depends on, so the player gets to learn the control on reward
-    // only, with no way to fail while they are still working out what the thumb does.
-    if (y < 200) {
-      this.scrapArc(y, rng.range(-14, 14), 7, this.randomCharge(), 12);
-      return rng.range(48, 62);
-    }
+    if (y < OPENING_LENGTH) return this.openingLesson(y);
 
     const roll = rng.next();
     const hard = smoothstep(0.2, 1, t);
@@ -433,6 +435,44 @@ export class World {
     }
     this.breather(y);
     return rng.range(50, 64);
+  }
+
+  /**
+   * The opening is a scripted lesson, not a gentle random stretch. It is hazard-free and it
+   * teaches by consequence in a fixed order: first that your own colour flies to you, then
+   * that the other colour will not come no matter how you steer, then that you must choose.
+   * Nothing here can kill the player, so the only thing they can learn is the rule.
+   */
+  private openingLesson(y: number): number {
+    if (!this.options.charged) {
+      this.scrapArc(y, this.rng.range(-14, 14), 7, 0, 12);
+      return 55;
+    }
+
+    // Lesson 1 — your colour comes to you. Player starts on blue.
+    if (y < 70) {
+      this.scrapLine(y, -9, 1, 5);
+      this.scrapLine(y + 8, 9, 1, 5);
+      return 70;
+    }
+
+    // Lesson 2 — a wall of the other colour. Steering cannot solve this; only the tap can.
+    if (y < 150) {
+      for (let i = -2; i <= 2; i++) this.scrapLine(y, i * 8, -1, 5);
+      return 80;
+    }
+
+    // Lesson 3 — both colours present, so the tap becomes a choice rather than a reflex.
+    this.scrapLine(y, -13, 1, 6);
+    this.scrapLine(y, 13, -1, 6);
+    return 60;
+  }
+
+  /** A vertical run of same-colour scrap. The clearest possible read of "these belong together". */
+  private scrapLine(y: number, x: number, pol: Polarity, count: number): void {
+    for (let i = 0; i < count; i++) {
+      this.addScrap(clamp(x, -TRACK_HALF + 2, TRACK_HALF - 2), y + i * 5.5, pol, 1);
+    }
   }
 
   private randomCharge(): Polarity {
@@ -544,7 +584,8 @@ export class World {
     this.scrap.push({
       x,
       y,
-      r: value >= 5 ? 1.7 : 1.25,
+      // Size is the value channel: a big piece is obviously worth more than a small one.
+      r: value >= 5 ? 2.3 : 1.2,
       vx: 0,
       vy: 0,
       polarity,

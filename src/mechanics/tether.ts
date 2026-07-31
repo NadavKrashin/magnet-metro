@@ -25,7 +25,6 @@ export class TetherMechanic implements Mechanic {
   readonly id = "tether";
   readonly name = "Tether";
   readonly pitch = "No steering. Hold to swing off pylons, release to slingshot.";
-  readonly hint = "HOLD to grab the nearest pylon  ·  RELEASE to fly";
   readonly worldOptions = { anchors: true, charged: false };
 
   private latchedIndex = -1;

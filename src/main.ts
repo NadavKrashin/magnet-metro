@@ -6,10 +6,8 @@ import { Renderer } from "./render/renderer";
 import { COURSE_LENGTH, MAX_INTEGRITY, VIEW_WIDTH, World } from "./game/world";
 import type { Mechanic } from "./mechanics/types";
 import { PolarityMechanic } from "./mechanics/polarity";
-import { TetherMechanic } from "./mechanics/tether";
 import { OverloadMechanic } from "./mechanics/overload";
 
-const HINT_DURATION = 4.5;
 const RUNS_KEY = "mm_runs_v1";
 
 interface RunRecord {
@@ -56,11 +54,10 @@ class Game {
   private renderer: Renderer;
   private input = new Input();
   private loop: Loop;
-  private mechanics: Mechanic[] = [
-    new PolarityMechanic(),
-    new TetherMechanic(),
-    new OverloadMechanic(),
-  ];
+  // Tether is parked, not deleted. The balance harness showed it barely responds to skill
+  // (+87% from a good bot against +1000% for the others) and the first player could not tell
+  // what it wanted. Two independent signals agreeing is enough to stop spending time on it.
+  private mechanics: Mechanic[] = [new PolarityMechanic(), new OverloadMechanic()];
   private active: Mechanic = this.mechanics[0]!;
   private world: World;
   private state: State = "menu";
@@ -73,6 +70,8 @@ class Game {
   private integrityEl = el("integrity");
   private progressEl = el("progress-fill");
   private hintEl = el("hint");
+  private chargeEl = el("charge");
+  private chargeShapeEl = el("charge-shape");
   private menuEl = el("menu");
   private resultsEl = el("results");
   private seedInput = el<HTMLInputElement>("seed-input");
@@ -152,8 +151,6 @@ class Game {
     this.menuEl.classList.add("hidden");
     this.resultsEl.classList.add("hidden");
     this.hud.classList.remove("hidden");
-    this.hintEl.textContent = this.active.hint;
-    this.hintEl.classList.add("on");
   }
 
   private showMenu(): void {
@@ -251,7 +248,6 @@ class Game {
     this.active.update(this.world, { ...raw, dragDx: raw.dragDx * worldPerPixel }, dt);
     this.world.step(dt);
 
-    if (this.world.elapsed > HINT_DURATION) this.hintEl.classList.remove("on");
     if (this.world.phase !== "running") this.endRun();
   };
 
@@ -267,6 +263,16 @@ class Game {
     this.multEl.textContent = `x${mult}`;
     this.multEl.classList.toggle("on", mult > 1);
     this.progressEl.style.width = `${w.progress * 100}%`;
+
+    // The prompt is authored by the mechanic against course position, so it always describes
+    // whatever is on screen right now rather than running off a fixed timer.
+    this.hintEl.textContent = w.prompt;
+    this.hintEl.classList.toggle("on", w.prompt.length > 0);
+    this.hintEl.classList.toggle("urgent", w.promptUrgent);
+
+    const pol = w.field.polarity;
+    this.chargeEl.classList.toggle("hidden", pol === 0);
+    this.chargeShapeEl.classList.toggle("red", pol === -1);
 
     const cells = this.integrityEl.children;
     for (let i = 0; i < cells.length; i++) {

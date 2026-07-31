@@ -14,16 +14,43 @@ npm run balance      # difficulty and skill-expression report across 12 seeds
 npm run standalone   # single self-contained HTML file in dist/standalone.html
 ```
 
-## The three candidates
+## The candidates
 
-All three share the same course generator, scoring, art, and run length. The only variable
-is what the thumb does, which is what makes their scores comparable.
+Both share the same course generator, scoring, art, and run length. The only variable is what
+the thumb does, which is what makes their scores comparable.
 
 | Mechanic | Control | The decision it creates |
 |---|---|---|
-| **Polarity** | Drag to steer, tap to flip red/blue | Read the next cluster's colour early enough to arrive on the right charge. Holding the wrong charge drags same-charge hazards onto you. |
-| **Tether** | No steering at all; hold to be pulled toward a pylon, release to slingshot | Pure timing. Routing is the whole game. |
+| **Switch** | Drag to steer, tap to change colour | Read the next cluster's colour early enough to arrive as the right colour. Being the wrong colour near a hazard drags that hazard onto you. |
 | **Overload** | Drag to steer, hold to charge, release to pulse | Charging collapses your magnet, so you are defenceless while winding up. "Do I have time before that wall?" |
+
+**Tether is parked** in `src/mechanics/tether.ts`, still working but out of the lineup. The
+balance harness showed it barely responds to skill (+87% from a good bot, against +1000% for
+the others) and the first player could not tell what it wanted from them. Two independent
+signals agreeing was enough to stop spending time on it.
+
+## How the rules are taught
+
+The first ~210 units of every course are a scripted, hazard-free lesson. Nothing can kill the
+player until it is over, so the only thing available to learn is the rule.
+
+For Switch, it runs in three beats: your own colour flies to you; then a wall of the other
+colour that steering cannot solve, which is the moment the tap is introduced; then both
+colours at once, which turns the tap into a choice.
+
+Three rules make this legible, and they were all corrections after the first play test:
+
+1. **Colour means exactly one thing** — which colour a piece is. Value is carried by size.
+   Earlier, gold meant "valuable" while red and blue meant "charge", so one visual channel
+   was carrying two unrelated rules.
+2. **Shape backs up colour** — blue is a circle, red is a diamond, and the drone wears the
+   shape of whatever it currently collects. This survives colour blindness and video
+   compression, which is where most people will first see the game.
+3. **Matching pieces are bright, mismatched pieces are dim and hollow.** "Will this come to
+   me?" is answerable at a glance instead of by recalling a rule.
+
+The mechanic is deliberately not framed as magnetism. Real magnets attract their opposite, so
+calling it polarity primed players with a rule that is the reverse of what the game does.
 
 ## Current balance readings
 
@@ -32,15 +59,18 @@ hazards; the skilled bot targets scrap and dodges. The gap between them is skill
 
 | Mechanic | Naive clear | Skilled clear | Skilled pickup | Skill lift |
 |---|---|---|---|---|
-| Polarity | 17% | 100% | 53% | +1063% |
-| Tether | 17% | 50% | 25% | +87% |
-| Overload | 8% | 100% | 68% | +1963% |
+| Switch | 8% | 100% | 51% | +1468% |
+| Overload | 8% | 100% | 67% | +1408% |
+| Tether *(parked)* | 17% | 33% | 23% | +60% |
 
 Read these as directional, not final. The naive bot is worse than a real first-time player
 because it never avoids anything, so true first-run completion sits somewhere above these
-numbers. The comparison *between* mechanics is the useful part, and there Tether is clearly
-the weakest: two very different play policies produce nearly the same result, which means the
-mechanic is not responding much to the player.
+numbers. The comparison *between* mechanics is the useful part.
+
+The naive clear rate is the number to watch. The genre wants roughly 80% of players finishing
+their first run, and the bots are nowhere near that. Some of that gap is the bot being far
+worse than a person, but not all of it, and the honest next step is human play rather than
+another round of tuning against a robot.
 
 ## Architecture
 

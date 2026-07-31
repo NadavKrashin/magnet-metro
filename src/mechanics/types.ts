@@ -14,8 +14,6 @@ export interface Mechanic {
   readonly name: string;
   /** One line for the mechanic picker. */
   readonly pitch: string;
-  /** Control instruction shown over the opening seconds of a run. */
-  readonly hint: string;
   /** What the course generator needs to spawn for this mechanic to work. */
   readonly worldOptions: WorldOptions;
 

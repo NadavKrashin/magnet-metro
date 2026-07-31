@@ -5,14 +5,36 @@ import type { View } from "./view";
 const COLOR_BLUE = "#5cc8ff";
 const COLOR_RED = "#ff5d6c";
 const COLOR_NEUTRAL = "#9fb4cc";
-const COLOR_GOLD = "#ffd257";
 const COLOR_ANCHOR = "#7cf5c8";
 
-function scrapColor(polarity: number, value: number): string {
-  if (value >= 5) return COLOR_GOLD;
+function chargeColor(polarity: number): string {
   if (polarity === 1) return COLOR_BLUE;
   if (polarity === -1) return COLOR_RED;
   return COLOR_NEUTRAL;
+}
+
+/**
+ * Charge is drawn as a shape as well as a colour: blue is a circle, red is a diamond.
+ * Colour alone would fail for colour-blind players and reads poorly in a compressed video
+ * clip, which is where most people will see this game first.
+ */
+function traceChargeShape(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  r: number,
+  polarity: number,
+): void {
+  ctx.beginPath();
+  if (polarity === -1) {
+    ctx.moveTo(x, y - r * 1.25);
+    ctx.lineTo(x + r * 1.25, y);
+    ctx.lineTo(x, y + r * 1.25);
+    ctx.lineTo(x - r * 1.25, y);
+    ctx.closePath();
+  } else {
+    ctx.arc(x, y, r, 0, TAU);
+  }
 }
 
 export class Renderer implements View {
@@ -149,24 +171,43 @@ export class Renderer implements View {
   }
 
   private drawScrap(ctx: CanvasRenderingContext2D, world: World): void {
+    const fieldPol = world.field.polarity;
     for (const s of world.scrap) {
       const x = this.toScreenX(s.x);
       const y = this.toScreenY(s.y);
       if (y < -40 || y > this.ch + 40) continue;
       const r = s.r * this.scale;
-      const color = scrapColor(s.polarity, s.value);
+      const color = chargeColor(s.polarity);
+      // "Will this come to me?" has to be answerable at a glance. Matching pieces are bright
+      // and haloed; mismatched ones are dim and flat, so the screen sorts itself visually.
+      const matches = fieldPol === 0 || s.polarity === 0 || s.polarity === fieldPol;
 
-      this.glow(ctx, x, y, r * 2.4, color, 0.14);
+      if (matches) {
+        this.glow(ctx, x, y, r * 2.4, color, 0.16);
+        ctx.globalAlpha = 1;
+      } else {
+        ctx.globalAlpha = 0.32;
+      }
+
       ctx.fillStyle = color;
-      ctx.beginPath();
-      ctx.arc(x, y, r, 0, TAU);
+      traceChargeShape(ctx, x, y, r, s.polarity);
       ctx.fill();
 
-      // Bright core so items stay visible against the glow when densely packed.
-      ctx.fillStyle = "rgba(255,255,255,0.75)";
-      ctx.beginPath();
-      ctx.arc(x - r * 0.25, y - r * 0.25, r * 0.35, 0, TAU);
-      ctx.fill();
+      if (matches) {
+        // Bright core so items stay visible against the glow when densely packed.
+        ctx.fillStyle = "rgba(255,255,255,0.8)";
+        ctx.beginPath();
+        ctx.arc(x - r * 0.22, y - r * 0.22, r * 0.34, 0, TAU);
+        ctx.fill();
+      } else {
+        // A hollow outline reads as "inert" rather than merely faint.
+        ctx.globalAlpha = 0.5;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = Math.max(1, this.scale * 0.1);
+        traceChargeShape(ctx, x, y, r, s.polarity);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
     }
   }
 
@@ -239,12 +280,11 @@ export class Renderer implements View {
       // Taper the tail so a long chain still reads as a single object.
       const taper = 1 - (i / n) * 0.45;
       const r = item.r * this.scale * taper;
-      const color = scrapColor(item.polarity, item.value);
-      this.glow(ctx, x, y, r * 2.0, color, 0.10);
+      const color = chargeColor(item.polarity);
+      this.glow(ctx, x, y, r * 2.0, color, 0.1);
       ctx.fillStyle = color;
       ctx.globalAlpha = 0.55 + 0.45 * taper;
-      ctx.beginPath();
-      ctx.arc(x, y, r, 0, TAU);
+      traceChargeShape(ctx, x, y, r, item.polarity);
       ctx.fill();
       ctx.globalAlpha = 1;
     }
@@ -264,14 +304,14 @@ export class Renderer implements View {
 
     this.glow(ctx, x, y, r * 3.0, color, 0.22);
 
+    // The drone wears the shape of its own charge. "I am a diamond, I collect diamonds" is a
+    // rule the player can infer from one glance instead of being told.
     ctx.fillStyle = color;
-    ctx.beginPath();
-    ctx.arc(x, y, r, 0, TAU);
+    traceChargeShape(ctx, x, y, r, pol);
     ctx.fill();
 
     ctx.fillStyle = "#ffffff";
-    ctx.beginPath();
-    ctx.arc(x, y, r * 0.52, 0, TAU);
+    traceChargeShape(ctx, x, y, r * 0.5, pol);
     ctx.fill();
 
     // A forward fin, so the drone has a clear facing and the shape is recognisable in a clip.

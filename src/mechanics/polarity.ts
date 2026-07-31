@@ -1,6 +1,6 @@
 import type { InputState } from "../core/input";
 import type { View } from "../render/view";
-import type { World } from "../game/world";
+import { OPENING_LENGTH, type World } from "../game/world";
 import type { Polarity } from "../game/types";
 import { TAU } from "../core/math";
 import { steer, type Mechanic } from "./types";
@@ -19,9 +19,10 @@ const FLIP_RING_DURATION = 0.35;
  */
 export class PolarityMechanic implements Mechanic {
   readonly id = "polarity";
-  readonly name = "Polarity";
-  readonly pitch = "Tap to flip red/blue. Pull what matches, shove what doesn't.";
-  readonly hint = "DRAG to steer  ·  TAP to flip charge";
+  readonly name = "Switch";
+  // Deliberately not phrased as magnetism. Real magnets attract their opposite, so calling
+  // this "polarity" primed players with a rule that is the reverse of what the game does.
+  readonly pitch = "You collect your own colour. Tap to change colour.";
   readonly worldOptions = { anchors: false, charged: true };
 
   private polarity: Polarity = 1;
@@ -53,6 +54,37 @@ export class PolarityMechanic implements Mechanic {
     world.field.strength = FIELD_STRENGTH;
     world.field.repelHazards = false;
     world.field.invulnerable = false;
+
+    this.updatePrompt(world);
+  }
+
+  /**
+   * Prompts are tied to course distance rather than a timer, so the instruction always
+   * matches what is actually on screen. Each one names the consequence the player is looking
+   * at rather than describing the control in the abstract.
+   */
+  private updatePrompt(world: World): void {
+    const y = world.player.y;
+    world.promptUrgent = false;
+
+    if (y < 70) {
+      world.prompt = "YOUR COLOUR FLIES TO YOU";
+    } else if (y < OPENING_LENGTH * 0.72) {
+      // Keyed off the current charge, not off whether a tap ever happened, so the prompt is
+      // still correct for a player who flips early or flips back.
+      if (this.polarity === -1) {
+        world.prompt = "NOW THEY COME TO YOU";
+      } else {
+        // The player is staring at a wall of the other colour that will not budge. This is
+        // the moment the tap has to be explained, and not a second earlier.
+        world.prompt = "TAP TO BECOME RED";
+        world.promptUrgent = true;
+      }
+    } else if (y < OPENING_LENGTH) {
+      world.prompt = "BOTH COLOURS — PICK ONE";
+    } else {
+      world.prompt = "";
+    }
   }
 
   draw(ctx: CanvasRenderingContext2D, world: World, view: View): void {

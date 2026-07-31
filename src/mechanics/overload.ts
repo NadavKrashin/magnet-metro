@@ -1,6 +1,6 @@
 import type { InputState } from "../core/input";
 import type { View } from "../render/view";
-import type { World } from "../game/world";
+import { OPENING_LENGTH, type World } from "../game/world";
 import { TAU, clamp, lerp } from "../core/math";
 import { steer, type Mechanic } from "./types";
 
@@ -25,7 +25,6 @@ export class OverloadMechanic implements Mechanic {
   readonly id = "overload";
   readonly name = "Overload";
   readonly pitch = "Hold to charge while defenceless. Release to blast scrap in.";
-  readonly hint = "DRAG to steer  ·  HOLD to charge  ·  RELEASE to pulse";
   readonly worldOptions = { anchors: false, charged: false };
 
   private charge = 0;
@@ -76,6 +75,26 @@ export class OverloadMechanic implements Mechanic {
       f.repelHazards = false;
     }
     f.invulnerable = false;
+
+    this.updatePrompt(world);
+  }
+
+  /** Tied to course distance so each instruction lands on the thing it describes. */
+  private updatePrompt(world: World): void {
+    const y = world.player.y;
+    world.promptUrgent = false;
+
+    if (y < 70) {
+      world.prompt = "HOLD TO CHARGE";
+      world.promptUrgent = this.charge < 0.05 && this.pulseTimer <= 0;
+    } else if (y < OPENING_LENGTH * 0.72) {
+      world.prompt = this.charge > 0.5 ? "LET GO NOW" : "RELEASE TO PULL IT ALL IN";
+      world.promptUrgent = this.charge > 0.5;
+    } else if (y < OPENING_LENGTH) {
+      world.prompt = "LONGER HOLD, BIGGER PULL";
+    } else {
+      world.prompt = "";
+    }
   }
 
   draw(ctx: CanvasRenderingContext2D, world: World, view: View): void {
