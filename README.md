@@ -1,7 +1,7 @@
 # Magnet Metro
 
 A one-thumb arcade salvage game for iOS and Android. This repository currently holds the
-**mechanic test**: three candidate control schemes running on one shared game, so the core
+**mechanic test**: two candidate control schemes running on one shared game, so the core
 interaction can be chosen on evidence before any of the metagame gets built.
 
 ## Running it
@@ -68,8 +68,9 @@ Three rules make this legible, and they were all corrections after the first pla
 2. **Shape backs up colour** — blue is a circle, red is a diamond, and the drone wears the
    shape of whatever it currently collects. This survives colour blindness and video
    compression, which is where most people will first see the game.
-3. **Matching pieces are bright, mismatched pieces are dim and hollow.** "Will this come to
-   me?" is answerable at a glance instead of by recalling a rule.
+3. **Your colour is printed solid; the other colour is an unprinted outline** — bare paper.
+   "Will this come to me?" is answerable at a glance instead of by recalling a rule, and it
+   is a far stronger read than bright-versus-dim.
 
 The mechanic is deliberately not framed as magnetism. Real magnets attract their opposite, so
 calling it polarity primed players with a rule that is the reverse of what the game does.
@@ -81,14 +82,19 @@ hazards; the skilled bot targets scrap and dodges. The gap between them is skill
 
 | Mechanic | Naive clear | Skilled clear | Skilled hits | Skill lift |
 |---|---|---|---|---|
-| Switch | 50% | 100% | 0.0 | +1187% |
-| Overload | 33% | 92% | 0.8 | +1193% |
-| Tether *(parked)* | 42% | 33% | 2.6 | +47% |
+| Switch | 50% | 100% | 0.3 | +1560% |
+| Overload | 17% | 100% | 0.4 | +1819% |
+| Tether *(parked)* | 33% | 25% | 2.8 | +54% |
 
 Naive clear rate jumped from 8% to 50% for Switch when colour became a real rule, because a
 blindly tapping player now eats walls by accident about half the time. That is the mechanic
 being forgiving to a beginner and generous to an expert at the same time, which is the shape
 this genre needs.
+
+Overload's naive rate is the current outlier and is worth watching. Its blind bot holds and
+releases on a fixed cycle, which with a collapsed field collects almost nothing — a
+worst-case that flatters the mechanic far less than a real beginner would manage. It still
+wants a look once there is human data.
 
 Read these as directional, not final. The naive bot is worse than a real first-time player
 because it never avoids anything, so true first-run completion sits somewhere above these
