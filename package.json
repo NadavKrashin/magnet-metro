@@ -11,12 +11,21 @@
     "typecheck": "tsc --noEmit",
     "test": "tsx test/sim.test.ts",
     "balance": "tsx test/balance.ts",
-    "standalone": "npm run build && node scripts/inline.mjs"
+    "standalone": "npm run build && node scripts/inline.mjs",
+    "sync": "npm run build && npx cap sync",
+    "android": "npm run sync && npx cap open android",
+    "ios": "npm run sync && npx cap open ios"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.4.2",
     "@types/node": "^22.20.1",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "vite": "^6.0.5"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.4.2",
+    "@capacitor/core": "^8.4.2",
+    "@capacitor/ios": "^8.4.2"
   }
 }
