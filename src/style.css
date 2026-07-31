@@ -728,6 +728,14 @@ button.double[disabled] {
   display: none;
 }
 
+/* Filming: hide the interface furniture that would clutter a clip. The score and the
+   colour indicator stay, because they are what the footage is meant to communicate. */
+body.demo .mute,
+body.demo .hint,
+body.demo .progress {
+  display: none !important;
+}
+
 /* ---------- Accessibility ---------- */
 
 :focus-visible {

@@ -1,9 +1,10 @@
 import "./style.css";
-import { Input } from "./core/input";
+import { Input, type InputState } from "./core/input";
 import { Loop } from "./core/loop";
 import { Rng, randomCode, seedFromCode } from "./core/rng";
 import { Renderer } from "./render/renderer";
 import { GameAudio } from "./audio/audio";
+import { autopilot, newAutopilotState, type AutopilotState } from "./game/autopilot";
 import { makeGrainTile } from "./render/texture";
 import { COURSE_LENGTH, VIEW_WIDTH, World } from "./game/world";
 import {
@@ -82,6 +83,13 @@ class Game {
   private revivedThisRun = false;
   /** Score of the run whose results are on screen, for the bonus and the share text. */
   private lastRunScore = 0;
+  /**
+   * Demo mode: the game plays itself and the interface gets out of the way. Enabled with
+   * ?demo=1, and used to film gameplay for store listings and ad creative without needing a
+   * person, a phone and a camera in the room.
+   */
+  private demo = new URLSearchParams(location.search).has("demo");
+  private autopilotState: AutopilotState = newAutopilotState();
   private loop: Loop;
   // Tether is parked, not deleted. The balance harness showed it barely responds to skill
   // (+87% from a good bot against +1000% for the others) and the first player could not tell
@@ -168,7 +176,12 @@ class Game {
 
     window.addEventListener("resize", this.onResize);
     this.onResize();
-    this.showMenu();
+    if (this.demo) {
+      document.body.classList.add("demo");
+      this.startRun();
+    } else {
+      this.showMenu();
+    }
     this.loop.start();
   }
 
@@ -285,6 +298,7 @@ class Game {
     this.state = "playing";
 
     this.revivedThisRun = false;
+    this.autopilotState = newAutopilotState();
     this.analytics.noteRunStarted();
     this.analytics.track("run_start", {
       mechanic: this.active.id,
@@ -662,14 +676,23 @@ class Game {
   private update = (dt: number): void => {
     if (this.state !== "playing") return;
 
-    const raw = this.input.snapshot(performance.now() / 1000);
-    // Drag arrives in CSS pixels; mechanics work in world units.
-    const worldPerPixel = VIEW_WIDTH / this.renderer.cssWidth;
-    this.active.update(this.world, { ...raw, dragDx: raw.dragDx * worldPerPixel }, dt);
+    let input: InputState;
+    if (this.demo) {
+      input = autopilot(this.world, this.active.id, this.autopilotState);
+    } else {
+      const raw = this.input.snapshot(performance.now() / 1000);
+      // Drag arrives in CSS pixels; mechanics work in world units.
+      const worldPerPixel = VIEW_WIDTH / this.renderer.cssWidth;
+      input = { ...raw, dragDx: raw.dragDx * worldPerPixel };
+    }
+    this.active.update(this.world, input, dt);
     this.world.step(dt);
 
     if (this.world.phase !== "running") {
-      if (this.shouldOfferRevive()) this.offerRevive();
+      if (this.demo) {
+        this.seedCode = randomCode(new Rng(Date.now() >>> 0));
+        this.startRun();
+      } else if (this.shouldOfferRevive()) this.offerRevive();
       else this.endRun();
     }
   };
