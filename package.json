@@ -9,7 +9,7 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host",
     "typecheck": "tsc --noEmit",
-    "test": "tsx test/sim.test.ts && tsx test/magnet.test.ts",
+    "test": "tsx test/sim.test.ts && tsx test/magnet.test.ts && tsx test/hazard.test.ts && tsx test/levels.test.ts",
     "balance": "tsx test/balance.ts",
     "standalone": "npm run build && node scripts/inline.mjs",
     "sync": "npm run build && npx cap sync",

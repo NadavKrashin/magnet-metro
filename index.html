@@ -26,6 +26,10 @@
           <div id="integrity" class="integrity"></div>
         </div>
         <div class="progress"><div id="progress-fill"></div></div>
+        <div id="objective" class="objective hidden">
+          <span id="objective-text"></span>
+          <span id="objective-progress"></span>
+        </div>
         <div id="hint" class="hint"></div>
         <div id="charge" class="charge hidden">
           <span id="charge-shape" class="charge-shape"></span>
@@ -37,15 +41,19 @@
         <div class="panel">
           <h1>Magnet Metro</h1>
           <p class="sub">
-            Two control schemes, one game. Same course, same scoring, same art — the only
-            difference is what your thumb does. The opening 20 seconds of every run teach you
-            the rule by making you use it. Sound on is strongly recommended.
+            You are blue or red. Your colour flies into you and makes you bigger; the other
+            colour bounces off and hurts. One tap changes which you are. Sound on is strongly
+            recommended.
           </p>
           <div class="bank">
             <span class="bank-label">Scrap banked</span>
             <span id="bank-value">0</span>
           </div>
-          <button id="btn-daily" class="wide primary daily">
+          <button id="btn-levels" class="wide primary daily">
+            <span>Levels</span>
+            <span id="levels-note" class="daily-note"></span>
+          </button>
+          <button id="btn-daily" class="wide daily">
             <span>Today's Run</span>
             <span id="daily-note" class="daily-note"></span>
           </button>
@@ -60,9 +68,18 @@
             <input id="seed-input" type="text" autocomplete="off" spellcheck="false" />
           </label>
           <p class="foot">
-            The same code always builds the same course, so scores are comparable between
-            mechanics and between people.
+            The same code always builds the same course, so any two people can play the exact
+            same one and compare.
           </p>
+        </div>
+      </div>
+
+      <div id="levels" class="screen hidden">
+        <div class="panel">
+          <h2>Levels</h2>
+          <p class="sub">Twelve fixed courses, each with one job to do. Finish one to open the next.</p>
+          <div id="level-list" class="level-list"></div>
+          <button id="btn-levels-close" class="wide primary">Back</button>
         </div>
       </div>
 
@@ -111,7 +128,7 @@
           </div>
           <div class="buttons">
             <button id="btn-share" class="quiet">Share run</button>
-            <button id="btn-menu" class="quiet">Change mechanic</button>
+            <button id="btn-menu" class="quiet">Menu</button>
           </div>
           <div id="compare" class="compare"></div>
         </div>

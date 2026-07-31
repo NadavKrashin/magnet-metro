@@ -10,8 +10,12 @@ import { COURSE_LENGTH, VIEW_WIDTH, World } from "./game/world";
 import {
   EDITIONS,
   UPGRADES,
+  LEVELS,
   contractById,
   dailyCode,
+  describeObjective,
+  levelPassed,
+  objectiveProgress,
   editionById,
   levelOf,
   loadSave,
@@ -19,6 +23,7 @@ import {
   nextGoal,
   saveSave,
   refillContracts,
+  scrapFromScore,
   upgradeCost,
   type SaveData,
 } from "./game/progression";
@@ -28,7 +33,6 @@ import { AdsService } from "./ads/ads";
 import { REWARD } from "./ads/config";
 import type { Mechanic } from "./mechanics/types";
 import { PolarityMechanic } from "./mechanics/polarity";
-import { OverloadMechanic } from "./mechanics/overload";
 
 const RUNS_KEY = "mm_runs_v1";
 const MUTE_KEY = "mm_muted_v1";
@@ -71,7 +75,7 @@ function saveRuns(runs: RunRecord[]): void {
   }
 }
 
-type State = "menu" | "playing" | "results" | "shop" | "revive";
+type State = "menu" | "playing" | "results" | "shop" | "revive" | "levels";
 
 class Game {
   private renderer: Renderer;
@@ -91,10 +95,14 @@ class Game {
   private demo = new URLSearchParams(location.search).has("demo");
   private autopilotState: AutopilotState = newAutopilotState();
   private loop: Loop;
-  // Tether is parked, not deleted. The balance harness showed it barely responds to skill
-  // (+87% from a good bot against +1000% for the others) and the first player could not tell
-  // what it wanted. Two independent signals agreeing is enough to stop spending time on it.
-  private mechanics: Mechanic[] = [new PolarityMechanic(), new OverloadMechanic()];
+  // One mechanic. Tether and Overload are parked in src/mechanics/, still working, still
+  // measured by the balance harness, but out of the game.
+  //
+  // Overload was cut for the same reason Tether was: it never touches colour, so it is not
+  // the game this became. It also measured far too easy — 96% pickup for a skilled player and
+  // a skill lift a quarter of Switch's — and a play test said so independently. Two modes
+  // also means every balance change has to be made twice, for a mode nobody preferred.
+  private mechanics: Mechanic[] = [new PolarityMechanic()];
   private active: Mechanic = this.mechanics[0]!;
   private world: World;
   private state: State = "menu";
@@ -103,6 +111,8 @@ class Game {
   private shopTab: "upgrades" | "editions" = "upgrades";
   /** True when the current run is on today's shared course. */
   private isDaily = false;
+  /** Index into LEVELS when playing the campaign, or -1 for a free run. */
+  private levelIndex = -1;
   private seedCode = randomCode(new Rng(Date.now() >>> 0));
 
   private hud = el("hud");
@@ -119,6 +129,8 @@ class Game {
   private muteEl = el<HTMLButtonElement>("mute");
   private shopEl = el("shop");
   private reviveEl = el("revive");
+  private levelsEl = el("levels");
+  private objectiveEl = el("objective");
 
   constructor() {
     const canvas = el<HTMLCanvasElement>("game");
@@ -141,13 +153,22 @@ class Game {
     });
 
     el("btn-retry").addEventListener("click", () => this.startRun());
-    el("btn-menu").addEventListener("click", () => this.showMenu());
+    el("btn-menu").addEventListener("click", () => {
+      // Leaving the results sheet drops any level or daily context, so the next free run is
+      // genuinely free rather than silently still being scored against level 7.
+      this.levelIndex = -1;
+      this.isDaily = false;
+      this.showMenu();
+    });
     el("btn-daily").addEventListener("click", () => {
       this.seedCode = dailyCode();
       this.seedInput.value = this.seedCode;
       this.isDaily = true;
+      this.levelIndex = -1;
       this.startRun();
     });
+    el("btn-levels").addEventListener("click", () => this.showLevels());
+    el("btn-levels-close").addEventListener("click", () => this.showMenu());
     el("btn-shop").addEventListener("click", () => this.showShop());
     el("btn-shop-2").addEventListener("click", () => this.showShop());
     el("btn-shop-close").addEventListener("click", () => this.showMenu());
@@ -224,6 +245,7 @@ class Game {
       btn.addEventListener("click", () => {
         this.active = m;
         this.isDaily = false;
+        this.levelIndex = -1;
         this.startRun();
       });
       list.appendChild(btn);
@@ -361,7 +383,7 @@ class Game {
   private async watchToDouble(): Promise<void> {
     const earned = await this.ads.showRewarded("double_scrap");
     if (!earned) return;
-    const bonus = this.lastRunScore * (REWARD.doubleScrapMultiplier - 1);
+    const bonus = scrapFromScore(this.lastRunScore) * (REWARD.doubleScrapMultiplier - 1);
     this.save.scrap += bonus;
     saveSave(this.save);
     this.analytics.track("currency_earned", { amount: bonus, source: "rewarded_double" });
@@ -391,11 +413,55 @@ class Game {
     }
   }
 
+  private showLevels(): void {
+    this.state = "levels";
+    this.menuEl.classList.add("hidden");
+    this.resultsEl.classList.add("hidden");
+    this.hud.classList.add("hidden");
+    this.levelsEl.classList.remove("hidden");
+
+    const list = el("level-list");
+    list.innerHTML = "";
+    for (let i = 0; i < LEVELS.length; i++) {
+      const lv = LEVELS[i]!;
+      const done = i < this.save.levelsDone;
+      // Strictly sequential: exactly one level is ever the next thing to do.
+      const locked = i > this.save.levelsDone;
+
+      const btn = document.createElement("button");
+      btn.className = done ? "level done" : "level";
+      btn.disabled = locked;
+      const prize = lv.unlockEdition
+        ? `+${lv.reward.toLocaleString()} scrap · ${lv.unlockEdition} edition`
+        : `+${lv.reward.toLocaleString()} scrap`;
+      btn.innerHTML =
+        `<span class="level-n">${lv.n}</span>` +
+        `<span class="level-body"><span class="level-goal">${describeObjective(lv)}</span>` +
+        `<div class="level-prize">${done ? "COMPLETE" : locked ? "LOCKED" : prize}</div></span>`;
+      btn.addEventListener("click", () => {
+        this.levelIndex = i;
+        this.isDaily = false;
+        this.seedCode = lv.seed;
+        this.seedInput.value = lv.seed;
+        this.levelsEl.classList.add("hidden");
+        this.startRun();
+      });
+      list.appendChild(btn);
+    }
+  }
+
   private showMenu(): void {
     this.state = "menu";
+    this.levelsEl.classList.add("hidden");
     this.buildMenu();
     this.buildContracts();
     el("bank-value").textContent = this.save.scrap.toLocaleString();
+
+    const total = LEVELS.length;
+    el("levels-note").textContent =
+      this.save.levelsDone >= total
+        ? "All twelve cleared"
+        : `Level ${this.save.levelsDone + 1} of ${total}`;
 
     const today = dailyCode();
     const done = this.save.dailyDate === today;
@@ -433,8 +499,9 @@ class Game {
 
     // Everything scored in a run is banked. A run that only produces a number is over the
     // moment it ends; a run that moves you closer to a wider coil is a reason to start another.
-    this.save.scrap += record.score;
-    this.save.lifetimeScrap += record.score;
+    const banked = scrapFromScore(record.score);
+    this.save.scrap += banked;
+    this.save.lifetimeScrap += banked;
     this.save.runs += 1;
 
     const today = dailyCode();
@@ -446,8 +513,35 @@ class Game {
       this.save.dailyBest = Math.max(this.save.dailyBest, record.score);
     }
 
+    // Campaign outcome, settled before the results sheet is written so the copy can lead with
+    // it. A level is the clearest goal the player has; it should be the headline, not a note.
+    const level = this.levelIndex >= 0 ? LEVELS[this.levelIndex] : undefined;
+    let levelCleared = false;
+    if (level) {
+      const passed = levelPassed(level, {
+        score: record.score,
+        won: record.won,
+        absorbed: w.stats.absorbed,
+        collected: record.collected,
+        maxCombo: record.maxCombo,
+        hits: record.hits,
+      });
+      // Only the frontier level advances progress; replaying an earlier one pays nothing, so
+      // the easiest level cannot be farmed for scrap.
+      if (passed && this.levelIndex === this.save.levelsDone) {
+        levelCleared = true;
+        this.save.levelsDone += 1;
+        this.save.scrap += level.reward;
+        if (level.unlockEdition && !this.save.ownedEditions.includes(level.unlockEdition)) {
+          this.save.ownedEditions.push(level.unlockEdition);
+        }
+        this.analytics.track("currency_earned", { amount: level.reward, source: `level_${level.n}` });
+      }
+      this.analytics.track("run_end", { level: level.n, passed });
+    }
+
     const completed = this.settleContracts({
-      score: record.score,
+      score: banked,
       won: record.won,
       absorbed: w.stats.absorbed,
       collected: record.collected,
@@ -459,11 +553,15 @@ class Game {
     const prior = this.runs.filter((r) => r.mechanic === this.active.id && r !== record);
     const priorBest = prior.length ? Math.max(...prior.map((r) => r.score)) : 0;
 
-    el("result-title").textContent = record.won
-      ? this.isDaily
-        ? "Today's run — cleared"
-        : `${this.active.name} — course cleared`
-      : `${this.active.name} — drone destroyed`;
+    el("result-title").textContent = level
+      ? levelCleared
+        ? `Level ${level.n} complete`
+        : `Level ${level.n} — ${describeObjective(level).toLowerCase()}`
+      : record.won
+        ? this.isDaily
+          ? "Today's run — cleared"
+          : "Course cleared"
+        : "Drone destroyed";
     el("result-score").textContent = String(record.score);
     el("result-best").textContent =
       record.score > priorBest && prior.length > 0
@@ -482,7 +580,7 @@ class Game {
       ["Thumb actions", String(record.actions)],
       ["Time", `${record.duration.toFixed(1)}s`],
       ["Mines swallowed", String(w.stats.absorbed)],
-      ["Scrap banked", `+${record.score.toLocaleString()}`],
+      ["Scrap banked", `+${banked.toLocaleString()}`],
       ["Course reached", `${Math.round((Math.min(this.world.player.y, COURSE_LENGTH) / COURSE_LENGTH) * 100)}%`],
     ];
     el("result-stats").innerHTML = rows
@@ -492,7 +590,11 @@ class Game {
     // The concrete next thing, named, with the gap. "Come back tomorrow" is not a reason to
     // return; "1,400 more and the coil gets wider" is.
     const goal = nextGoal(this.save);
-    el("result-goal").innerHTML = completed.length
+    el("result-goal").innerHTML = levelCleared
+      ? `<b>+${level!.reward.toLocaleString()} scrap.</b>${level!.unlockEdition ? ` The ${level!.unlockEdition} edition is yours — equip it in the workshop.` : " Next level unlocked."}`
+      : level
+        ? `<b>Not this time.</b> ${describeObjective(level)}. Run it again.`
+        : completed.length
       ? `<b>Contract complete.</b><br>${completed.join("<br>")}`
       : goal
       ? goal.remaining === 0
@@ -518,7 +620,7 @@ class Game {
       duration: Math.round(record.duration),
       daily: this.isDaily,
     });
-    this.analytics.track("currency_earned", { amount: record.score, source: "run" });
+    this.analytics.track("currency_earned", { amount: banked, source: "run" });
     for (const done of completed) this.analytics.track("contract_completed", { detail: done });
 
     this.hud.classList.add("hidden");
@@ -718,6 +820,21 @@ class Game {
 
     // The soundtrack is driven by how the run is going, not by a clock.
     this.audio.setIntensity(0.35 * w.progress + 0.65 * Math.min(1, w.combo / 40));
+
+    const level = this.levelIndex >= 0 ? LEVELS[this.levelIndex] : undefined;
+    this.objectiveEl.classList.toggle("hidden", !level);
+    if (level) {
+      const prog = objectiveProgress(level, {
+        score: w.score,
+        absorbed: w.stats.absorbed,
+        maxCombo: w.stats.maxCombo,
+        hits: w.stats.hits,
+        progress: w.progress,
+      });
+      el("objective-text").textContent = `Lv ${level.n} · ${describeObjective(level)}`;
+      el("objective-progress").textContent = prog.text;
+      this.objectiveEl.classList.toggle("done", prog.done);
+    }
 
     const pol = w.field.polarity;
     this.chargeEl.classList.toggle("hidden", pol === 0);

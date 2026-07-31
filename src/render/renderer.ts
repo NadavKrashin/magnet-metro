@@ -80,6 +80,22 @@ export class Renderer implements View {
     ctx.closePath();
   };
 
+  /** An eight-lobed flower. Nothing else in the game has a bumpy outline. */
+  private traceRosette: Trace = (cx, cy, rr) => {
+    const ctx = this.ctx;
+    ctx.beginPath();
+    const lobes = 8;
+    for (let i = 0; i <= 64; i++) {
+      const a = (i / 64) * TAU;
+      const rad = rr * (0.82 + 0.28 * Math.cos(a * lobes));
+      const px = cx + Math.cos(a) * rad;
+      const py = cy + Math.sin(a) * rad;
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+  };
+
   private traceFor(polarity: number): Trace {
     return polarity === -1 ? this.traceDiamond : this.traceCircle;
   }
@@ -170,7 +186,7 @@ export class Renderer implements View {
       if (!matches) continue;
       const y = this.toScreenY(s.y);
       if (y < -40 || y > this.ch + 40) continue;
-      this.traceFor(s.polarity)(this.toScreenX(s.x), y, s.r * this.scale * 0.38);
+      this.traceRosette(this.toScreenX(s.x), y, s.r * this.scale * 0.36);
       ctx.fill();
     }
 
@@ -182,8 +198,7 @@ export class Renderer implements View {
       const r = h.r * this.scale;
       const edible = world.options.charged && fieldPol !== 0 && h.polarity === fieldPol;
       if (edible) {
-        this.traceFor(h.polarity)(x, y, r * 0.5);
-        ctx.stroke();
+        // The ring is already open; nothing to knock out.
       } else {
         // A slash through the black mass, so a threat has some internal structure.
         ctx.beginPath();
@@ -316,7 +331,9 @@ export class Renderer implements View {
       if (y < -40 || y > this.ch + 40) continue;
       const r = s.r * this.scale;
       const matches = fieldPol === 0 || s.polarity === 0 || s.polarity === fieldPol;
-      const trace = this.traceFor(s.polarity);
+      // Big pieces get their own silhouette rather than just a bigger disc, so "valuable" and
+      // "edible hazard" can never be confused at speed.
+      const trace = s.value >= BIG_VALUE ? this.traceRosette : this.traceFor(s.polarity);
 
 
       // Yours is printed solid. Not yours is an unprinted outline — bare paper. That is a
@@ -335,6 +352,7 @@ export class Renderer implements View {
   }
 
   private drawHazards(world: World): void {
+    const ctx = this.ctx;
     const fieldPol = world.field.polarity;
     for (const h of world.hazards) {
       const x = this.toScreenX(h.x);
@@ -345,9 +363,20 @@ export class Renderer implements View {
       const plate = inkFor(h.polarity);
 
       if (edible) {
-        // Food. Printed in its own ink, smooth, with a knocked-out ring so it reads as
-        // something to swallow rather than something to survive.
-        this.printShape(this.traceFor(h.polarity), x, y, r * 0.95, plate, Math.max(2, this.scale * 0.2));
+        // Food, and it must not be confusable with either a pickup or a threat. Drawn as a
+        // heavy open ring: no fill, no spikes. A play test could not tell these apart from
+        // large scrap when both were solid discs, and misreading one as the other is the
+        // difference between eating a wall and flinching away from it.
+        ctx.strokeStyle = plate;
+        ctx.lineWidth = Math.max(3, this.scale * 0.55);
+        this.traceFor(h.polarity)(x, y, r * 0.78);
+        ctx.stroke();
+        ctx.strokeStyle = ink.key;
+        ctx.lineWidth = Math.max(1.5, this.scale * 0.13);
+        this.traceFor(h.polarity)(x, y, r * 1.06);
+        ctx.stroke();
+        this.traceFor(h.polarity)(x, y, r * 0.5);
+        ctx.stroke();
         continue;
       }
 

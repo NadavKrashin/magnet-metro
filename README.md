@@ -31,20 +31,33 @@ npm run balance      # difficulty and skill-expression report across 12 seeds
 npm run standalone   # single self-contained HTML file in dist/standalone.html
 ```
 
-## The candidates
+## The control scheme
 
-Both share the same course generator, scoring, art, and run length. The only variable is what
-the thumb does, which is what makes their scores comparable.
+Drag to steer, tap to change colour. That is the whole input.
 
-| Mechanic | Control | The decision it creates |
-|---|---|---|
-| **Switch** | Drag to steer, tap to change colour | Read the next cluster's colour early enough to arrive as the right colour. Being the wrong colour near a hazard drags that hazard onto you. |
-| **Overload** | Drag to steer, hold to charge, release to pulse | Charging collapses your magnet, so you are defenceless while winding up. "Do I have time before that wall?" |
+**Tether and Overload are parked** in `src/mechanics/`, still working and still measured by
+the balance harness, but out of the game. Both were cut for the same reason: neither touches
+colour, so neither is the game this became. Overload also measured far too easy — 96% pickup
+for a skilled player against a skill lift a quarter of Switch's — and a play test said so
+independently. Two modes also means every balance change has to be made twice, for a mode
+nobody preferred.
 
-**Tether is parked** in `src/mechanics/tether.ts`, still working but out of the lineup. The
-balance harness showed it barely responds to skill (+87% from a good bot, against +1000% for
-the others) and the first player could not tell what it wanted from them. Two independent
-signals agreeing was enough to stop spending time on it.
+## Three ways to play
+
+| Mode | What it is |
+|---|---|
+| **Levels** | Twelve fixed courses, one named objective each, unlocked in order, paying scrap and print editions |
+| **Today's Run** | One course per calendar day, identical for everyone |
+| **Free run** | A random course, or any course code you type in |
+
+Levels answer the question the endless run cannot: *what am I supposed to do next.* Objectives
+are single conditions on purpose — a compound goal is harder to show in a HUD than it is
+worth, and a player who fails one cannot tell which half they missed.
+
+`test/levels.test.ts` plays every level with the autopilot on both a stock and a fully
+upgraded drone. The first five must be clearable with no upgrades; later ones may require
+them, because that is what makes the shop matter. It has already caught three impossible
+targets and two trivial ones.
 
 ## The colour rule
 
@@ -170,6 +183,30 @@ lightness, so the colour rule stays readable at speed no matter which is equippe
 The results sheet always names the next concrete thing and the gap to it — "1,400 more scrap
 unlocks Coil 3". "Come back tomorrow" is not a reason to return; a named, close, specific
 purchase is.
+
+## Reading the screen
+
+Three silhouettes, and nothing shares one:
+
+| Shape | Meaning |
+|---|---|
+| Solid disc or diamond | Ordinary scrap. Your colour is filled, the other colour is an unprinted outline |
+| Open ring | A hazard **in your colour** — swallow it |
+| Black spiked star | A hazard in the other colour — it will cost you a cell |
+| Rosette | High-value scrap |
+
+This was rebuilt after a play test reported taking damage from a matching-colour hazard. The
+rules turned out to be correct — `test/hazard.test.ts` now enforces that a matching hazard is
+always absorbed and never damages — so the fault was purely that a large scrap disc, an edible
+hazard and the drone itself were all "a big circle with a hole in it". Being right in the
+simulation is worthless if the screen says otherwise.
+
+## Economy
+
+Score and currency are deliberately on different scales. A score climbing in thousands is
+exciting to watch; a currency climbing in thousands empties the shop in an afternoon. Only a
+sixth of a run's score is banked as spendable scrap, so a skilled run yields roughly 4,000
+against a full shop costing around 245,000.
 
 ## The magnet was broken for four commits
 

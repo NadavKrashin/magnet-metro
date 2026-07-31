@@ -50,6 +50,7 @@ await page.evaluate(() => {
       ownedEditions: ["federal", "riot"],
       edition: "federal",
       runs: 7,
+      levelsDone: 4,
     }),
   );
 });
@@ -62,6 +63,11 @@ await page.locator("#tab-editions").click();
 await page.waitForTimeout(250);
 await page.screenshot({ path: join(outDir, "7-shop-editions.png") });
 await page.locator("#btn-shop-close").click();
+await page.waitForTimeout(250);
+await page.locator("#btn-levels").click();
+await page.waitForTimeout(300);
+await page.screenshot({ path: join(outDir, "8-levels.png") });
+await page.locator("#btn-levels-close").click();
 await page.waitForTimeout(250);
 
 // Start the first mechanic.
