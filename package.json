@@ -1,0 +1,22 @@
+{
+  "name": "magnet-metro",
+  "version": "0.1.0",
+  "private": true,
+  "description": "One-thumb arcade salvage game. Mechanic prototype harness.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --host",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx test/sim.test.ts",
+    "balance": "tsx test/balance.ts",
+    "standalone": "npm run build && node scripts/inline.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.5"
+  }
+}

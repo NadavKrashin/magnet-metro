@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.DS_Store
+*.local
+.vite/
+
+# Native shells, added when the Capacitor wrap goes in. Generated from the web build.
+/android/
+/ios/

@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, user-scalable=no"
+    />
+    <meta name="theme-color" content="#080d18" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <title>Magnet Metro — mechanic test</title>
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="game"></canvas>
+
+      <div id="hud" class="hidden">
+        <div class="hud-top">
+          <div class="hud-score">
+            <span id="score">0</span>
+            <span id="mult" class="mult">x1</span>
+          </div>
+          <div id="integrity" class="integrity"></div>
+        </div>
+        <div class="progress"><div id="progress-fill"></div></div>
+        <div id="hint" class="hint"></div>
+      </div>
+
+      <div id="menu" class="screen">
+        <div class="panel">
+          <h1>Magnet Metro</h1>
+          <p class="sub">
+            Three control schemes, one game. Same course, same scoring, same art — the only
+            difference is what your thumb does. Play each one twice, then pick.
+          </p>
+          <div id="mechanic-list" class="mechanics"></div>
+          <label class="seed-row">
+            <span>Course code</span>
+            <input id="seed-input" type="text" autocomplete="off" spellcheck="false" />
+          </label>
+          <p class="foot">
+            The same code always builds the same course, so scores are comparable between
+            mechanics and between people.
+          </p>
+        </div>
+      </div>
+
+      <div id="results" class="screen hidden">
+        <div class="panel">
+          <h2 id="result-title">Run complete</h2>
+          <div class="score-big"><span id="result-score">0</span></div>
+          <div id="result-best" class="best"></div>
+          <table class="stats">
+            <tbody id="result-stats"></tbody>
+          </table>
+          <div class="buttons">
+            <button id="btn-retry" class="primary">Run again</button>
+            <button id="btn-menu">Change mechanic</button>
+          </div>
+          <div id="compare" class="compare"></div>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
