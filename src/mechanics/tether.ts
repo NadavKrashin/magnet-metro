@@ -61,8 +61,8 @@ export class TetherMechanic implements Mechanic {
     if (input.axis !== 0) p.vx = input.axis * 40;
 
     world.field.polarity = 0;
-    world.field.radius = 13;
-    world.field.strength = 44;
+    world.field.radius = 20;
+    world.field.strength = 400;
     world.field.repelHazards = false;
     world.field.invulnerable = false;
   }

@@ -5,7 +5,20 @@ import { Rng, randomCode, seedFromCode } from "./core/rng";
 import { Renderer } from "./render/renderer";
 import { GameAudio } from "./audio/audio";
 import { makeGrainTile } from "./render/texture";
-import { COURSE_LENGTH, MAX_INTEGRITY, VIEW_WIDTH, World } from "./game/world";
+import { COURSE_LENGTH, VIEW_WIDTH, World } from "./game/world";
+import {
+  EDITIONS,
+  UPGRADES,
+  editionById,
+  levelOf,
+  loadSave,
+  modifiersFor,
+  nextGoal,
+  saveSave,
+  upgradeCost,
+  type SaveData,
+} from "./game/progression";
+import { applyEdition } from "./render/palette";
 import type { Mechanic } from "./mechanics/types";
 import { PolarityMechanic } from "./mechanics/polarity";
 import { OverloadMechanic } from "./mechanics/overload";
@@ -51,7 +64,7 @@ function saveRuns(runs: RunRecord[]): void {
   }
 }
 
-type State = "menu" | "playing" | "results";
+type State = "menu" | "playing" | "results" | "shop";
 
 class Game {
   private renderer: Renderer;
@@ -66,6 +79,8 @@ class Game {
   private world: World;
   private state: State = "menu";
   private runs: RunRecord[] = loadRuns();
+  private save: SaveData = loadSave();
+  private shopTab: "upgrades" | "editions" = "upgrades";
   private seedCode = randomCode(new Rng(Date.now() >>> 0));
 
   private hud = el("hud");
@@ -80,11 +95,14 @@ class Game {
   private resultsEl = el("results");
   private seedInput = el<HTMLInputElement>("seed-input");
   private muteEl = el<HTMLButtonElement>("mute");
+  private shopEl = el("shop");
 
   constructor() {
     const canvas = el<HTMLCanvasElement>("game");
+    // Before the renderer bakes anything, so the baked sheet uses the right stock.
+    applyEdition(editionById(this.save.edition));
     this.renderer = new Renderer(canvas);
-    this.world = new World(seedFromCode(this.seedCode), this.active.worldOptions);
+    this.world = new World(seedFromCode(this.seedCode), this.active.worldOptions, modifiersFor(this.save));
     this.loop = new Loop(this.update, this.render);
 
     this.input.attach(canvas);
@@ -102,6 +120,11 @@ class Game {
 
     el("btn-retry").addEventListener("click", () => this.startRun());
     el("btn-menu").addEventListener("click", () => this.showMenu());
+    el("btn-shop").addEventListener("click", () => this.showShop());
+    el("btn-shop-2").addEventListener("click", () => this.showShop());
+    el("btn-shop-close").addEventListener("click", () => this.showMenu());
+    el("tab-upgrades").addEventListener("click", () => this.setShopTab("upgrades"));
+    el("tab-editions").addEventListener("click", () => this.setShopTab("editions"));
     this.seedInput.addEventListener("change", () => {
       const v = this.seedInput.value.trim().toUpperCase();
       this.seedCode = v.length > 0 ? v : randomCode(new Rng(Date.now() >>> 0));
@@ -135,7 +158,7 @@ class Game {
 
   private buildIntegrity(): void {
     this.integrityEl.innerHTML = "";
-    for (let i = 0; i < MAX_INTEGRITY; i++) {
+    for (let i = 0; i < this.world.maxIntegrity; i++) {
       const d = document.createElement("div");
       d.className = "cell";
       this.integrityEl.appendChild(d);
@@ -170,7 +193,12 @@ class Game {
   }
 
   private startRun(): void {
-    this.world = new World(seedFromCode(this.seedCode), this.active.worldOptions);
+    this.world = new World(
+      seedFromCode(this.seedCode),
+      this.active.worldOptions,
+      modifiersFor(this.save),
+    );
+    this.buildIntegrity();
     this.world.setViewHeight(this.renderer.viewHeightWorld);
     this.active.reset();
     this.input.reset();
@@ -194,6 +222,8 @@ class Game {
   private showMenu(): void {
     this.state = "menu";
     this.buildMenu();
+    el("bank-value").textContent = this.save.scrap.toLocaleString();
+    this.shopEl.classList.add("hidden");
     this.hud.classList.add("hidden");
     this.resultsEl.classList.add("hidden");
     this.menuEl.classList.remove("hidden");
@@ -219,6 +249,13 @@ class Game {
     this.runs.push(record);
     saveRuns(this.runs);
 
+    // Everything scored in a run is banked. A run that only produces a number is over the
+    // moment it ends; a run that moves you closer to a wider coil is a reason to start another.
+    this.save.scrap += record.score;
+    this.save.lifetimeScrap += record.score;
+    this.save.runs += 1;
+    saveSave(this.save);
+
     const prior = this.runs.filter((r) => r.mechanic === this.active.id && r !== record);
     const priorBest = prior.length ? Math.max(...prior.map((r) => r.score)) : 0;
 
@@ -242,16 +279,140 @@ class Game {
       ["Hits taken", String(record.hits)],
       ["Thumb actions", String(record.actions)],
       ["Time", `${record.duration.toFixed(1)}s`],
+      ["Scrap banked", `+${record.score.toLocaleString()}`],
       ["Course reached", `${Math.round((Math.min(this.world.player.y, COURSE_LENGTH) / COURSE_LENGTH) * 100)}%`],
     ];
     el("result-stats").innerHTML = rows
       .map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`)
       .join("");
 
+    // The concrete next thing, named, with the gap. "Come back tomorrow" is not a reason to
+    // return; "1,400 more and the coil gets wider" is.
+    const goal = nextGoal(this.save);
+    el("result-goal").innerHTML = goal
+      ? goal.remaining === 0
+        ? `<b>${goal.label}.</b> Spend it in the workshop.`
+        : `<b>${goal.remaining.toLocaleString()} more scrap</b> unlocks ${goal.label}.`
+      : "<b>Everything is bought.</b> Nothing left but a better score.";
+
     el("compare").innerHTML = this.comparisonTable();
 
     this.hud.classList.add("hidden");
     this.resultsEl.classList.remove("hidden");
+  }
+
+  // -------------------------------------------------------------------------
+  // Workshop
+  // -------------------------------------------------------------------------
+
+  private showShop(): void {
+    this.state = "shop";
+    this.menuEl.classList.add("hidden");
+    this.resultsEl.classList.add("hidden");
+    this.hud.classList.add("hidden");
+    this.shopEl.classList.remove("hidden");
+    this.renderShop();
+  }
+
+  private setShopTab(tab: "upgrades" | "editions"): void {
+    this.shopTab = tab;
+    el("tab-upgrades").classList.toggle("on", tab === "upgrades");
+    el("tab-editions").classList.toggle("on", tab === "editions");
+    this.renderShop();
+  }
+
+  private renderShop(): void {
+    el("shop-bank").textContent = this.save.scrap.toLocaleString();
+    const list = el("shop-list");
+    list.innerHTML = "";
+    if (this.shopTab === "upgrades") this.renderUpgrades(list);
+    else this.renderEditions(list);
+  }
+
+  private renderUpgrades(list: HTMLElement): void {
+    for (const def of UPGRADES) {
+      const level = levelOf(this.save, def.id);
+      const maxed = level >= def.maxLevel;
+      const cost = maxed ? 0 : upgradeCost(def, level);
+      const affordable = !maxed && this.save.scrap >= cost;
+
+      const row = document.createElement("div");
+      row.className = maxed ? "item owned" : "item";
+
+      const body = document.createElement("div");
+      body.className = "item-body";
+      body.innerHTML =
+        `<div class="item-name">${def.name}</div>` +
+        `<div class="item-blurb">${def.blurb}</div>` +
+        `<div class="item-state">${def.describe(level)}</div>` +
+        `<div class="pips">${Array.from(
+          { length: def.maxLevel },
+          (_, i) => `<span class="pip${i < level ? " on" : ""}"></span>`,
+        ).join("")}</div>`;
+
+      const buy = document.createElement("button");
+      buy.className = "buy";
+      buy.textContent = maxed ? "MAX" : cost.toLocaleString();
+      buy.disabled = maxed || !affordable;
+      buy.addEventListener("click", () => {
+        if (this.save.scrap < cost) return;
+        this.save.scrap -= cost;
+        this.save.upgrades[def.id] = level + 1;
+        saveSave(this.save);
+        this.audio.unlock();
+        this.audio.absorb();
+        this.renderShop();
+      });
+
+      row.append(body, buy);
+      list.appendChild(row);
+    }
+  }
+
+  private renderEditions(list: HTMLElement): void {
+    for (const ed of EDITIONS) {
+      const owned = this.save.ownedEditions.includes(ed.id);
+      const equipped = this.save.edition === ed.id;
+      const affordable = this.save.scrap >= ed.cost;
+
+      const row = document.createElement("div");
+      row.className = owned ? "item owned" : "item";
+
+      const swatch = document.createElement("div");
+      swatch.className = "swatch";
+      swatch.style.background = ed.paper;
+      swatch.innerHTML =
+        `<i style="background:${ed.blue}"></i><i style="background:${ed.red}"></i>`;
+
+      const body = document.createElement("div");
+      body.className = "item-body";
+      body.innerHTML =
+        `<div class="item-name">${ed.name}</div>` +
+        `<div class="item-blurb">${ed.blurb}</div>`;
+
+      const buy = document.createElement("button");
+      buy.className = equipped ? "buy equipped" : "buy";
+      buy.textContent = equipped ? "ON" : owned ? "USE" : ed.cost.toLocaleString();
+      buy.disabled = !owned && !affordable;
+      buy.addEventListener("click", () => {
+        if (!owned) {
+          if (this.save.scrap < ed.cost) return;
+          this.save.scrap -= ed.cost;
+          this.save.ownedEditions.push(ed.id);
+        }
+        this.save.edition = ed.id;
+        saveSave(this.save);
+        // Re-print everything: the canvas plates and the interface both follow the stock.
+        applyEdition(ed);
+        this.renderer.resize();
+        this.audio.unlock();
+        this.audio.absorb();
+        this.renderShop();
+      });
+
+      row.append(swatch, body, buy);
+      list.appendChild(row);
+    }
   }
 
   /**

@@ -41,7 +41,12 @@
             difference is what your thumb does. The opening 20 seconds of every run teach you
             the rule by making you use it. Sound on is strongly recommended.
           </p>
+          <div class="bank">
+            <span class="bank-label">Scrap banked</span>
+            <span id="bank-value">0</span>
+          </div>
           <div id="mechanic-list" class="mechanics"></div>
+          <button id="btn-shop" class="wide">Workshop</button>
           <label class="seed-row">
             <span>Course code</span>
             <input id="seed-input" type="text" autocomplete="off" spellcheck="false" />
@@ -53,6 +58,22 @@
         </div>
       </div>
 
+      <div id="shop" class="screen hidden">
+        <div class="panel">
+          <h2>Workshop</h2>
+          <div class="bank">
+            <span class="bank-label">Scrap banked</span>
+            <span id="shop-bank">0</span>
+          </div>
+          <div class="tabs">
+            <button id="tab-upgrades" class="tab on">Upgrades</button>
+            <button id="tab-editions" class="tab">Editions</button>
+          </div>
+          <div id="shop-list" class="shop-list"></div>
+          <button id="btn-shop-close" class="wide primary">Back</button>
+        </div>
+      </div>
+
       <div id="results" class="screen hidden">
         <div class="panel">
           <h2 id="result-title">Run complete</h2>
@@ -61,10 +82,12 @@
           <table class="stats">
             <tbody id="result-stats"></tbody>
           </table>
+          <div id="result-goal" class="goal"></div>
           <div class="buttons">
             <button id="btn-retry" class="primary">Run again</button>
-            <button id="btn-menu">Change mechanic</button>
+            <button id="btn-shop-2">Workshop</button>
           </div>
+          <button id="btn-menu" class="wide quiet">Change mechanic</button>
           <div id="compare" class="compare"></div>
         </div>
       </div>

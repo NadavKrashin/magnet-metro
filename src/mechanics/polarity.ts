@@ -6,8 +6,14 @@ import { TAU } from "../core/math";
 import { inkFor } from "../render/palette";
 import { steer, type Mechanic } from "./types";
 
-const FIELD_RADIUS = 15;
-const FIELD_STRENGTH = 46;
+/**
+ * Reach and pull were both far too small to be perceptible. Measured against a stationary
+ * drone, scrap was closing at 3 u/s while the drone flew past at 34-65 u/s — so relative to
+ * the player nothing moved, and the magnet may as well not have existed. Radius now covers a
+ * meaningful slice of the screen, and the pull outruns the fly-by.
+ */
+const FIELD_RADIUS = 22;
+const FIELD_STRENGTH = 420;
 const FLIP_RING_DURATION = 0.35;
 
 /**
@@ -47,7 +53,7 @@ export class PolarityMechanic implements Mechanic {
     this.flipRing = Math.max(0, this.flipRing - dt);
 
     world.field.polarity = this.polarity;
-    world.field.radius = FIELD_RADIUS;
+    world.field.radius = FIELD_RADIUS + world.mods.fieldRadiusBonus;
     world.field.strength = FIELD_STRENGTH;
     world.field.repelHazards = false;
     world.field.invulnerable = false;
@@ -94,14 +100,14 @@ export class PolarityMechanic implements Mechanic {
   draw(ctx: CanvasRenderingContext2D, world: World, view: View): void {
     const cx = view.toScreenX(world.player.x);
     const cy = view.toScreenY(world.player.y);
-    const ink = inkFor(this.polarity);
+    const plate = inkFor(this.polarity);
 
     ctx.save();
     ctx.globalCompositeOperation = "multiply";
 
     // Field reach, drawn as a printed dashed rule rather than a glow. A press cannot make
     // light, so range is shown with a mark.
-    ctx.strokeStyle = ink;
+    ctx.strokeStyle = plate;
     ctx.globalAlpha = 0.4;
     ctx.lineWidth = Math.max(1, view.scale * 0.11);
     ctx.setLineDash([view.scale * 0.9, view.scale * 0.9]);

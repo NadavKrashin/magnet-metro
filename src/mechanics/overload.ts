@@ -2,15 +2,15 @@ import type { InputState } from "../core/input";
 import type { View } from "../render/view";
 import { OPENING_LENGTH, type World } from "../game/world";
 import { TAU, clamp, lerp } from "../core/math";
-import { INK_KEY, INK_RED } from "../render/palette";
+import { ink } from "../render/palette";
 import { steer, type Mechanic } from "./types";
 
 const CHARGE_TIME = 0.85;
 const MIN_CHARGE = 0.12;
 const PULSE_DURATION = 0.45;
-const IDLE_RADIUS = 9;
-const PULSE_MIN_RADIUS = 15;
-const PULSE_MAX_RADIUS = 42;
+const IDLE_RADIUS = 14;
+const PULSE_MIN_RADIUS = 22;
+const PULSE_MAX_RADIUS = 55;
 
 /**
  * Candidate C — risk/reward on a single button.
@@ -52,10 +52,10 @@ export class OverloadMechanic implements Mechanic {
         this.pulseTimer = PULSE_DURATION;
         world.stats.actions += 1;
         world.shake = Math.min(world.shake + this.charge * 1.2, 2.2);
-        world.burst(world.player.x, world.player.y, 10 + Math.floor(this.charge * 20), INK_RED);
+        world.burst(world.player.x, world.player.y, 10 + Math.floor(this.charge * 20), ink.red);
         world.hitStop = Math.max(world.hitStop, 0.05 * this.charge);
         world.absorbFlash = this.charge;
-        world.absorbFlashInk = INK_RED;
+        world.absorbFlashInk = ink.red;
         world.events?.onAbsorb();
       }
       this.charge = 0;
@@ -70,13 +70,13 @@ export class OverloadMechanic implements Mechanic {
       // Radius expands over the life of the pulse so it reads as a travelling shockwave.
       const t = 1 - this.pulseTimer / PULSE_DURATION;
       const peak = lerp(PULSE_MIN_RADIUS, PULSE_MAX_RADIUS, this.pulsePower);
-      f.radius = lerp(IDLE_RADIUS, peak, Math.min(1, t * 2));
-      f.strength = lerp(70, 150, this.pulsePower);
+      f.radius = lerp(IDLE_RADIUS, peak, Math.min(1, t * 2)) + world.mods.fieldRadiusBonus;
+      f.strength = lerp(520, 1000, this.pulsePower);
       f.repelHazards = true;
     } else {
       // Charging collapses the field. This is the cost that makes the decision real.
-      f.radius = lerp(IDLE_RADIUS, 2.5, this.charge);
-      f.strength = 34;
+      f.radius = lerp(IDLE_RADIUS + world.mods.fieldRadiusBonus, 3.5, this.charge);
+      f.strength = 330;
       f.repelHazards = false;
     }
     f.invulnerable = false;
@@ -109,7 +109,7 @@ export class OverloadMechanic implements Mechanic {
     ctx.save();
     ctx.globalCompositeOperation = "multiply";
     // Current field reach.
-    ctx.strokeStyle = this.pulseTimer > 0 ? INK_RED : INK_KEY;
+    ctx.strokeStyle = this.pulseTimer > 0 ? ink.red : ink.key;
     ctx.globalAlpha = 0.4;
     ctx.lineWidth = Math.max(1, view.scale * 0.16);
     ctx.beginPath();
@@ -119,7 +119,7 @@ export class OverloadMechanic implements Mechanic {
     // Charge meter drawn as an arc around the drone: readable without looking away.
     if (this.charge > 0.02) {
       ctx.globalAlpha = 0.95;
-      ctx.strokeStyle = this.charge >= 1 ? INK_RED : INK_KEY;
+      ctx.strokeStyle = this.charge >= 1 ? ink.red : ink.key;
       ctx.lineWidth = Math.max(2, view.scale * 0.5);
       ctx.beginPath();
       ctx.arc(cx, cy, world.player.r * 2.1 * view.scale, -Math.PI / 2, -Math.PI / 2 + TAU * this.charge);
@@ -130,7 +130,7 @@ export class OverloadMechanic implements Mechanic {
     if (this.pulseTimer > 0) {
       const t = 1 - this.pulseTimer / PULSE_DURATION;
       ctx.globalAlpha = (1 - t) * 0.8;
-      ctx.strokeStyle = INK_RED;
+      ctx.strokeStyle = ink.red;
       ctx.lineWidth = Math.max(1, view.scale * 0.5 * (1 - t));
       ctx.beginPath();
       ctx.arc(cx, cy, lerp(PULSE_MIN_RADIUS, PULSE_MAX_RADIUS, this.pulsePower) * t * view.scale, 0, TAU);

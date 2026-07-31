@@ -30,6 +30,6 @@ export function steer(world: World, input: InputState): void {
   const p = world.player;
   // Direct positional drag: the drone tracks the thumb one-to-one, which is what makes
   // runners feel responsive. Keyboard is a velocity fallback for desktop testing only.
-  p.x += input.dragDx;
-  p.vx = input.axis * 46;
+  p.x += input.dragDx * world.mods.steerScale;
+  p.vx = input.axis * 46 * world.mods.steerScale;
 }

@@ -1,16 +1,7 @@
 import { TAU } from "../core/math";
-import { TRACK_HALF, VIEW_WIDTH, World } from "../game/world";
+import { BIG_VALUE, TRACK_HALF, VIEW_WIDTH, World } from "../game/world";
 import type { View } from "./view";
-import {
-  INK_BLUE,
-  INK_KEY,
-  INK_RED,
-  MISREGISTER_X,
-  MISREGISTER_Y,
-  PAPER,
-  PAPER_SHADE,
-  inkFor,
-} from "./palette";
+import { MISREGISTER_X, MISREGISTER_Y, ink, inkFor } from "./palette";
 import { makeHalftoneTile } from "./texture";
 
 type Trace = (cx: number, cy: number, rr: number) => void;
@@ -103,16 +94,16 @@ export class Renderer implements View {
     x: number,
     y: number,
     r: number,
-    ink: string | null,
+    plate: string | null,
     keyWeight: number,
-    keyInk = INK_KEY,
+    keyInk = ink.key,
   ): void {
     const ctx = this.ctx;
     const mx = MISREGISTER_X * this.scale;
     const my = MISREGISTER_Y * this.scale;
 
-    if (ink) {
-      ctx.fillStyle = ink;
+    if (plate) {
+      ctx.fillStyle = plate;
       trace(x + mx, y + my, r);
       ctx.fill();
     }
@@ -170,11 +161,11 @@ export class Renderer implements View {
     const ctx = this.ctx;
     const fieldPol = world.field.polarity;
     ctx.save();
-    ctx.fillStyle = PAPER;
-    ctx.strokeStyle = PAPER;
+    ctx.fillStyle = ink.paper;
+    ctx.strokeStyle = ink.paper;
 
     for (const s of world.scrap) {
-      if (s.value < 50) continue;
+      if (s.value < BIG_VALUE) continue;
       const matches = fieldPol === 0 || s.polarity === 0 || s.polarity === fieldPol;
       if (!matches) continue;
       const y = this.toScreenY(s.y);
@@ -210,7 +201,7 @@ export class Renderer implements View {
       const trace = this.traceFor(world.field.polarity);
       trace(x, y, r);
       ctx.fill();
-      ctx.strokeStyle = INK_KEY;
+      ctx.strokeStyle = ink.key;
       ctx.lineWidth = Math.max(2, this.scale * 0.2);
       trace(x, y, r);
       ctx.stroke();
@@ -233,10 +224,10 @@ export class Renderer implements View {
     const leftEdge = this.cw / 2 - TRACK_HALF * this.scale;
     const rightEdge = this.cw / 2 + TRACK_HALF * this.scale;
 
-    ctx.fillStyle = PAPER;
+    ctx.fillStyle = ink.paper;
     ctx.fillRect(0, 0, this.cw, this.ch);
 
-    ctx.fillStyle = PAPER_SHADE;
+    ctx.fillStyle = ink.paperShade;
     ctx.fillRect(0, 0, leftEdge, this.ch);
     ctx.fillRect(rightEdge, 0, this.cw - rightEdge, this.ch);
 
@@ -250,7 +241,7 @@ export class Renderer implements View {
       ctx.restore();
     }
 
-    ctx.strokeStyle = INK_KEY;
+    ctx.strokeStyle = ink.key;
     ctx.lineWidth = Math.max(2, this.scale * 0.22);
     ctx.beginPath();
     ctx.moveTo(leftEdge, 0);
@@ -279,7 +270,7 @@ export class Renderer implements View {
     const speedT = Math.min(1, (world.player.speed / 34 - 1) / 0.9);
     const spacing = 13 - speedT * 6;
     const first = Math.floor(this.cameraY / spacing) * spacing;
-    ctx.strokeStyle = INK_KEY;
+    ctx.strokeStyle = ink.key;
     ctx.globalAlpha = 0.22 + speedT * 0.4;
     ctx.lineWidth = Math.max(1, this.scale * 0.11);
     ctx.beginPath();
@@ -304,7 +295,7 @@ export class Renderer implements View {
   private drawRegistrationMarkOn(ctx: CanvasRenderingContext2D, x: number, y: number): void {
     const r = this.scale * 1.5;
     if (r < 4) return;
-    ctx.strokeStyle = INK_KEY;
+    ctx.strokeStyle = ink.key;
     ctx.globalAlpha = 0.35;
     ctx.lineWidth = Math.max(1, this.scale * 0.08);
     ctx.beginPath();
@@ -337,7 +328,7 @@ export class Renderer implements View {
         r,
         matches ? inkFor(s.polarity) : null,
         Math.max(1.5, this.scale * (matches ? 0.17 : 0.13)),
-        matches ? INK_KEY : inkFor(s.polarity),
+        matches ? ink.key : inkFor(s.polarity),
       );
 
     }
@@ -351,12 +342,12 @@ export class Renderer implements View {
       if (y < -60 || y > this.ch + 60) continue;
       const r = h.r * this.scale;
       const edible = world.options.charged && fieldPol !== 0 && h.polarity === fieldPol;
-      const ink = inkFor(h.polarity);
+      const plate = inkFor(h.polarity);
 
       if (edible) {
         // Food. Printed in its own ink, smooth, with a knocked-out ring so it reads as
         // something to swallow rather than something to survive.
-        this.printShape(this.traceFor(h.polarity), x, y, r * 0.95, ink, Math.max(2, this.scale * 0.2));
+        this.printShape(this.traceFor(h.polarity), x, y, r * 0.95, plate, Math.max(2, this.scale * 0.2));
         continue;
       }
 
@@ -377,8 +368,8 @@ export class Renderer implements View {
         ctx.closePath();
       };
 
-      this.printShape(spike, x, y, r, ink, 0);
-      this.ctx.fillStyle = INK_KEY;
+      this.printShape(spike, x, y, r, plate, 0);
+      this.ctx.fillStyle = ink.key;
       spike(x, y, r);
       this.ctx.fill();
 
@@ -391,7 +382,7 @@ export class Renderer implements View {
       const y = this.toScreenY(a.y);
       if (y < -60 || y > this.ch + 60) continue;
       const r = a.r * this.scale;
-      this.printShape(this.traceCircle, x, y, r, a.active ? INK_BLUE : null, Math.max(2, this.scale * 0.2));
+      this.printShape(this.traceCircle, x, y, r, a.active ? ink.blue : null, Math.max(2, this.scale * 0.2));
     }
   }
 
@@ -423,12 +414,12 @@ export class Renderer implements View {
     const pulse = 1 + world.collectPulse * 0.2;
     const r = p.r * this.scale * pulse;
     const pol = world.field.polarity;
-    const ink = pol === 0 ? INK_KEY : inkFor(pol);
+    const plate = pol === 0 ? ink.key : inkFor(pol);
     const trace = this.traceFor(pol);
 
     if (world.invulnTimer > 0 && Math.floor(world.invulnTimer * 12) % 2 === 0) return;
 
-    this.printShape(trace, x, y, r, ink, Math.max(2.5, this.scale * 0.26));
+    this.printShape(trace, x, y, r, plate, Math.max(2.5, this.scale * 0.26));
 
   }
 
@@ -463,7 +454,7 @@ export class Renderer implements View {
       const y = this.toScreenY(f.y);
       ctx.globalAlpha = Math.min(1, t * 1.6);
       // Key-plate outline under the ink, the way display type is trapped in a two-colour print.
-      ctx.strokeStyle = INK_KEY;
+      ctx.strokeStyle = ink.key;
       ctx.lineWidth = Math.max(3, this.scale * 0.42);
       ctx.strokeText(f.text, x, y);
       ctx.fillStyle = f.hue;
@@ -493,7 +484,7 @@ export class Renderer implements View {
       ctx.save();
       ctx.globalCompositeOperation = "multiply";
       ctx.globalAlpha = world.hitFlash * 0.42;
-      ctx.fillStyle = INK_RED;
+      ctx.fillStyle = ink.red;
       ctx.fillRect(0, 0, this.cw, this.ch);
       ctx.restore();
     }

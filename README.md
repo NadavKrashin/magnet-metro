@@ -105,6 +105,47 @@ their first run, and the bots are nowhere near that. Some of that gap is the bot
 worse than a person, but not all of it, and the honest next step is human play rather than
 another round of tuning against a robot.
 
+## Progression: workshop, upgrades, editions
+
+Everything scored in a run is banked as scrap and spent in the workshop. The point is to give
+a 30-second run consequences that outlive it — a run that only produces a number is finished
+the moment it ends.
+
+Five upgrade tracks, all chosen because they are **felt in play** rather than read on a
+screen. A player should be able to notice the last thing they bought:
+
+| Upgrade | Effect |
+|---|---|
+| **Coil** | Widens the magnet, 22 to 37 reach |
+| **Hull** | Up to three extra cells before the drone breaks up |
+| **Servos** | Sharper steering response |
+| **Capacitor** | The multiplier steps on fewer pieces |
+| **Claw** | Everything collected is worth more |
+
+**Editions** are the cosmetic layer: a full palette swap of stock and both inks. They fit the
+art direction far better than costumes would, and they are the cheapest possible cosmetic to
+build while still visibly changing the entire game. Each pair separates on hue *and* on
+lightness, so the colour rule stays readable at speed no matter which is equipped.
+
+The results sheet always names the next concrete thing and the gap to it — "1,400 more scrap
+unlocks Coil 3". "Come back tomorrow" is not a reason to return; a named, close, specific
+purchase is.
+
+## The magnet was broken for four commits
+
+Worth recording, because every other test passed the whole time.
+
+Colour, collection and scoring all worked, so scores went up and the sim tests were green. But
+the pull itself was far too weak and its radius far too small: measured against a stationary
+drone, scrap closed at **3 units/second while the drone flew past at 34–65**. Relative to the
+player nothing moved. There was no perceptible magnet in a game named after one — players were
+simply colliding with things.
+
+`npm run test` now includes `test/magnet.test.ts`, which asserts the property rather than the
+numbers: a piece inside the field must close **faster than the drone travels forward**, and the
+wrong colour must be visibly pushed away. Any future tuning that quietly breaks the feel fails
+the build.
+
 ## Art direction: two-colour screenprint
 
 The game is drawn as ink on paper, not light on black. That one decision drives everything:

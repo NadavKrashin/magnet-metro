@@ -1,5 +1,6 @@
 import { Rng } from "../core/rng";
-import { INK_BLUE, INK_KEY, INK_RED } from "../render/palette";
+import { ink } from "../render/palette";
+import { baseModifiers, type Modifiers } from "./progression";
 import { clamp, circlesHit, damp, dist, smoothstep } from "../core/math";
 import type {
   Anchor,
@@ -29,19 +30,22 @@ const CHAIN_VISUAL_CAP = 90;
 /** Links added to the tail for each hazard swallowed. Bulk should look like bulk. */
 const CHAIN_PER_ABSORB = 5;
 const INVULN_AFTER_HIT = 1.1;
-const COMBO_PER_STEP = 8;
 const COMBO_MAX_MULT = 8;
 /** Radians per second for patrolling hazards. */
 const DRIFT_SPEED = 1.4;
+/** Ceiling on how fast an attracted piece may close, in world units per second. */
+const MAX_SCRAP_SPEED = 115;
+/** Matching hazards are drawn in at this fraction of the field strength. */
+const HAZARD_PULL_FACTOR = 0.22;
 /** Course distance given over to the scripted teaching sequence. */
 export const OPENING_LENGTH = 290;
 /** Absorbing a matching hazard is worth this much before the combo multiplier. */
 const HAZARD_ABSORB_VALUE = 60;
 /** Base worth of an ordinary piece. Deliberately not 1: a score that climbs in tens reads as
  *  progress, and a score that climbs in ones reads as nothing happening. */
-const SCRAP_VALUE = 10;
+export const SCRAP_VALUE = 10;
 /** The oversized pieces. */
-const BIG_VALUE = 50;
+export const BIG_VALUE = 50;
 
 /**
  * Hooks the presentation layer subscribes to. The simulation stays free of any dependency on
@@ -70,8 +74,8 @@ export class World {
   player: Player = { x: 0, y: 0, vx: 0, r: 2.3, speed: BASE_SPEED };
   field: Field = {
     polarity: 1,
-    radius: 13,
-    strength: 46,
+    radius: 22,
+    strength: 420,
     repelHazards: false,
     invulnerable: false,
   };
@@ -123,11 +127,20 @@ export class World {
   private spawnCursor = 60;
   private viewHeight = 142;
 
-  constructor(seed: number, options: WorldOptions) {
+  /** Permanent upgrades bought in the shop. Defaults to an unmodified drone. */
+  readonly mods: Modifiers;
+
+  constructor(seed: number, options: WorldOptions, mods: Modifiers = baseModifiers()) {
     this.seed = seed;
     this.rng = new Rng(seed);
     this.options = options;
+    this.mods = mods;
+    this.integrity = MAX_INTEGRITY + mods.extraLives;
     this.trail.push({ x: 0, y: 0, s: 0 });
+  }
+
+  get maxIntegrity(): number {
+    return MAX_INTEGRITY + this.mods.extraLives;
   }
 
   setViewHeight(h: number): void {
@@ -139,7 +152,7 @@ export class World {
   }
 
   get multiplier(): number {
-    return Math.min(1 + Math.floor(this.combo / COMBO_PER_STEP), COMBO_MAX_MULT);
+    return Math.min(1 + Math.floor(this.combo / this.mods.comboStep), COMBO_MAX_MULT);
   }
 
   /** Advance the simulation. Mechanics must have written `field` and `player.vx` first. */
@@ -218,12 +231,20 @@ export class World {
         s.vy += (dy / d) * accel * dt;
       }
 
+      // Cap the closing speed so a piece cannot cross the collection radius inside one step
+      // and tunnel straight through the drone.
+      const sp = Math.hypot(s.vx, s.vy);
+      if (sp > MAX_SCRAP_SPEED) {
+        s.vx = (s.vx / sp) * MAX_SCRAP_SPEED;
+        s.vy = (s.vy / sp) * MAX_SCRAP_SPEED;
+      }
+
       s.x += s.vx * dt;
       s.y += s.vy * dt;
-      s.vx *= 0.93;
-      s.vy *= 0.93;
+      s.vx *= 0.9;
+      s.vy *= 0.9;
 
-      if (!circlesHit(p.x, p.y, p.r + 0.6, s.x, s.y, s.r)) continue;
+      if (!circlesHit(p.x, p.y, p.r + 1.2, s.x, s.y, s.r)) continue;
 
       // Colour is a rule, not a hint. Touching the wrong colour must not collect it, or the
       // colour carries no meaning and the player can simply barge through everything.
@@ -279,7 +300,9 @@ export class World {
         const dy = p.y - h.y;
         const d = Math.sqrt(dx * dx + dy * dy);
         if (d < f.radius && d > 0.0001) {
-          const pull = f.strength * 0.6 * (1 - d / f.radius);
+          // Deliberately far gentler than the pull on scrap: a wall of hazards rocketing at
+          // the player at full field strength is chaos rather than a reward.
+          const pull = f.strength * HAZARD_PULL_FACTOR * (1 - d / f.radius);
           h.vx += (dx / d) * pull * dt;
           h.vy += (dy / d) * pull * dt;
         }
@@ -308,7 +331,7 @@ export class World {
     this.stats.collected += 1;
     if (this.combo > this.stats.maxCombo) this.stats.maxCombo = this.combo;
 
-    const gained = s.value * this.multiplier;
+    const gained = Math.round(s.value * this.multiplier * this.mods.valueScale);
     this.score += gained;
     this.collectPulse = 1;
 
@@ -316,7 +339,7 @@ export class World {
 
     // Colour carries one meaning only: which charge the item is. Value is carried by size,
     // so the player never has to decode two different rules from the same visual channel.
-    const color = s.polarity === -1 ? INK_RED : s.polarity === 1 ? INK_BLUE : INK_KEY;
+    const color = s.polarity === -1 ? ink.red : s.polarity === 1 ? ink.blue : ink.key;
     this.burst(s.x, s.y, s.value >= BIG_VALUE ? 16 : 7, color);
     if (s.value >= BIG_VALUE) this.float(s.x, s.y, `+${gained}`, color);
     this.events?.onCollect(this.combo - 1);
@@ -332,7 +355,7 @@ export class World {
     this.combo += 1;
     if (this.combo > this.stats.maxCombo) this.stats.maxCombo = this.combo;
 
-    const gained = HAZARD_ABSORB_VALUE * this.multiplier;
+    const gained = Math.round(HAZARD_ABSORB_VALUE * this.multiplier * this.mods.valueScale);
     this.score += gained;
     this.stats.collected += 1;
     this.collectPulse = 1;
@@ -342,7 +365,7 @@ export class World {
     this.shake = Math.min(this.shake + 1.1, 2.6);
     this.hitStop = Math.max(this.hitStop, 0.075);
     this.absorbFlash = 1;
-    this.absorbFlashInk = h.polarity === -1 ? INK_RED : INK_BLUE;
+    this.absorbFlashInk = h.polarity === -1 ? ink.red : ink.blue;
 
     // A hazard is bulk, not a pellet. Dumping several links into the tail at once is what
     // turns eating a wall into visible, sudden growth rather than a slightly bigger number.
@@ -350,7 +373,7 @@ export class World {
       this.chain.push({ x: h.x, y: h.y, r: 1.5, polarity: h.polarity, value: 1 });
     }
 
-    const color = h.polarity === -1 ? INK_RED : INK_BLUE;
+    const color = h.polarity === -1 ? ink.red : ink.blue;
     this.burst(h.x, h.y, 26, color);
     this.float(h.x, h.y, `+${gained}`, color);
     this.events?.onAbsorb();
@@ -370,10 +393,10 @@ export class World {
     for (let i = 0; i < lost; i++) {
       const item = this.chain.pop();
       if (!item) break;
-      this.burst(item.x, item.y, 4, INK_KEY);
+      this.burst(item.x, item.y, 4, ink.key);
     }
-    this.burst(h.x, h.y, 22, INK_RED);
-    this.float(this.player.x, this.player.y + 4, "-" + lost, INK_RED);
+    this.burst(h.x, h.y, 22, ink.red);
+    this.float(this.player.x, this.player.y + 4, "-" + lost, ink.red);
     this.events?.onHit();
   }
 

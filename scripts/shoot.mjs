@@ -39,6 +39,31 @@ await page.goto(`file://${join(root, "dist", "standalone.html")}`);
 await page.waitForTimeout(400);
 await page.screenshot({ path: join(outDir, "1-menu.png") });
 
+// Give the shop something to show, then capture both tabs.
+await page.evaluate(() => {
+  localStorage.setItem(
+    "mm_save_v2",
+    JSON.stringify({
+      scrap: 42000,
+      lifetimeScrap: 42000,
+      upgrades: { coil: 2, claw: 1 },
+      ownedEditions: ["federal", "riot"],
+      edition: "federal",
+      runs: 7,
+    }),
+  );
+});
+await page.reload();
+await page.waitForTimeout(300);
+await page.locator("#btn-shop").click();
+await page.waitForTimeout(250);
+await page.screenshot({ path: join(outDir, "6-shop-upgrades.png") });
+await page.locator("#tab-editions").click();
+await page.waitForTimeout(250);
+await page.screenshot({ path: join(outDir, "7-shop-editions.png") });
+await page.locator("#btn-shop-close").click();
+await page.waitForTimeout(250);
+
 // Start the first mechanic.
 await page.locator(".mech").first().click();
 await page.waitForTimeout(500);
