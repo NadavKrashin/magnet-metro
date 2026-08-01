@@ -127,6 +127,8 @@ class Game {
   private runs: RunRecord[] = loadRuns();
   private save: SaveData = loadSave();
   private shopTab: "upgrades" | "editions" = "upgrades";
+  /** Where Back should go from the workshop, so the results sheet is not lost on a price check. */
+  private shopReturn: "menu" | "results" = "menu";
   /** True when the current run is on today's shared course. */
   private isDaily = false;
   /** Index into LEVELS when playing the campaign, or -1 for a free run. */
@@ -227,8 +229,14 @@ class Game {
     el("btn-levels").addEventListener("click", () => this.showLevels());
     el("btn-levels-close").addEventListener("click", () => this.showMenu());
     el("btn-shop").addEventListener("click", () => this.showShop());
-    el("btn-shop-2").addEventListener("click", () => this.showShop());
-    el("btn-shop-close").addEventListener("click", () => this.showMenu());
+    // Opening the workshop from the results sheet has to be able to go back to it: the sheet
+    // still holds Share and the rewarded bonus, and a player who only wanted to check a price
+    // was losing both without ever choosing to.
+    el("btn-shop-2").addEventListener("click", () => this.showShop("results"));
+    el("btn-shop-close").addEventListener("click", () => {
+      if (this.shopReturn === "results") this.showResults();
+      else this.showMenu();
+    });
     el("tab-upgrades").addEventListener("click", () => this.setShopTab("upgrades"));
     el("tab-editions").addEventListener("click", () => this.setShopTab("editions"));
     el("btn-free").addEventListener("click", () => {
@@ -780,6 +788,7 @@ class Game {
     if (level) {
       const passed = levelPassed(level, {
         score: record.score,
+        banked,
         won: record.won,
         absorbed: w.stats.absorbed,
         pressEaten: w.stats.pressEaten,
@@ -807,7 +816,8 @@ class Game {
     }
 
     const contractCredits = settleContracts(this.save, {
-      score: banked,
+      score: record.score,
+      banked,
       won: record.won,
       absorbed: w.stats.absorbed,
       pressEaten: w.stats.pressEaten,
@@ -967,15 +977,31 @@ class Game {
 
     // Only once the results are already on screen, and only if pacing allows. Never between a
     // tap and the thing the tap was for.
-    void this.ads.maybeShowInterstitial(this.save.runs);
+    //
+    // And never on a sheet that is offering the rewarded bonus. A player reaching for "Double
+    // it" would otherwise be served an interstitial first and watch two ads back to back —
+    // the cheaper one teaching them to resent the sheet that the better one lives on. The
+    // rewarded placement pays more and buys goodwill instead of spending it, so it wins.
+    if (doubleBtn.disabled) void this.ads.maybeShowInterstitial(this.save.runs);
+    else this.analytics.track("interstitial_eligible", { shown: false, reason: "rewarded_offered" });
   }
 
   // -------------------------------------------------------------------------
   // Workshop
   // -------------------------------------------------------------------------
 
-  private showShop(): void {
+  /** Put the results sheet back exactly as it was, bonus and share state included. */
+  private showResults(): void {
+    this.state = "results";
+    this.shopEl.classList.add("hidden");
+    this.menuEl.classList.add("hidden");
+    this.hud.classList.add("hidden");
+    this.resultsEl.classList.remove("hidden");
+  }
+
+  private showShop(from: "menu" | "results" = "menu"): void {
     this.state = "shop";
+    this.shopReturn = from;
     this.menuEl.classList.add("hidden");
     this.resultsEl.classList.add("hidden");
     this.hud.classList.add("hidden");

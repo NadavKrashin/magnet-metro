@@ -26,7 +26,8 @@ Everything below serves that thesis. Anything that does not is a candidate for c
 ```bash
 npm install
 npm run dev          # dev server; open the printed network URL on a phone
-npm run test         # simulation, magnet, hazard, level, endless and economy checks
+npm run test         # sim, magnet, hazard, level, endless, opening, economy, onboarding,
+                     # streak and record checks
 npm run balance      # difficulty and skill-expression report across 12 seeds
 npm run standalone   # one self-contained HTML file in dist/standalone.html (94 kB)
 npm run verify       # build, prove progress persists, screenshot, report frame time
@@ -75,6 +76,13 @@ link. Set `SHARE_BASE_URL` in `src/analytics/config.ts` to wherever the web buil
 finished, Presses recur on a rhythm as milestones rather than as an ending, and the progress
 bar measures the run against the player's own record instead of a finish line. Speed is capped
 so a long run stays reactable rather than becoming a slideshow.
+
+**Your record is a physical line.** The previous best is printed across the track as a dashed
+finishing rule, so you watch it approach for ten seconds and break through it — and crossing
+it gets the same treatment as swallowing a Press: shove, freeze, ink slam, and an ascending
+fanfare. It was previously a small label change, which is a poor way to mark the one moment
+the whole mode is played for, and the poorest possible clip. On a first-ever run there is no
+record, so the HUD reads plain distance rather than claiming a record from the first metre.
 
 ## The campaign
 
@@ -141,8 +149,17 @@ Colour was decorative, and the first player said so immediately.
 
 ## How the rules are taught
 
-The first ~210 units of every course are a scripted, hazard-free lesson. Nothing can kill the
+The first 290 units of a course are a scripted, hazard-free lesson. Nothing can kill the
 player until it is over, so the only thing available to learn is the rule.
+
+**It stops once it has worked.** Eight seconds of classroom at the head of every run is right
+for someone who has never seen the colour rule and is the single biggest drag on the "one more
+go" loop for someone who graduated days ago. Once the save shows three runs played or a level
+cleared — the same threshold the menu uses to offer the campaign — Free Run opens on a 90-unit
+warm-up with the captions off instead. Levels, dailies and shared links always keep the full
+lesson: a shared course has to build identically on every device regardless of who opens it,
+and a first-timer arriving from a link still needs teaching. `test/opening.test.ts` pins both
+halves.
 
 For Switch it runs in four beats: your own colour comes to you; then a wall of the other
 colour that steering cannot solve, which is the moment the tap is introduced; then a field of
@@ -205,9 +222,19 @@ this gives every run a climax.
 date. Determinism was built into the course generator from the first commit precisely so this
 would cost nothing later: no server, no level data to distribute.
 
+**Streaks** are what make the daily worth protecting. Playing on consecutive days climbs a
+counter that the menu button leads with, and when it is one day from lapsing the button says
+so and picks up the dashed rule. The first daily of a day pays 250 × the streak, capped at
+seven days, so an unbroken habit is worth having and a two-month streak never out-earns
+playing well. Replaying today's course cannot pay twice. It needs no server: the save already
+knows what day it last played. `test/streak.test.ts` covers the arithmetic that is wrong in
+silence — month, year and leap-day boundaries, gaps, replays, and the at-risk window.
+
 **Contracts** are three rotating objectives that ask for a specific behaviour — swallow thirty
 mines, finish without losing a cell, hold a chain of sixty. They pay in the same scrap the
-shop spends, so they feed the existing loop rather than introducing a second currency.
+shop spends, so they feed the existing loop rather than introducing a second currency. A new
+save opens with a one-off **starter** contract sized to finish in two ordinary runs, which is
+never drawn again.
 
 ## Progression: workshop, upgrades, editions
 
@@ -231,9 +258,17 @@ art direction far better than costumes would, and they are the cheapest possible
 build while still visibly changing the entire game. Each pair separates on hue *and* on
 lightness, so the colour rule stays readable at speed no matter which is equipped.
 
+**The first pip of Coil is an intro price of 400.** A measured naive first run banks 111
+scrap, so the standing 1,200 put the first purchase five to ten runs away — most likely in a
+second session that never happens. The first purchase is where the meta actually hooks: the
+run stops being a score and starts making you permanently stronger. It has to land while they
+are still holding the phone, and with the starter contract it now lands on run two. The curve
+past that first pip is untouched, so the long tail is unchanged.
+
 The results sheet always names the next concrete thing and the gap to it — "1,400 more scrap
 unlocks Coil 3". "Come back tomorrow" is not a reason to return; a named, close, specific
-purchase is.
+purchase is. It will not point a first-timer at the campaign while the menu is still
+deliberately holding it back.
 
 ## Reading the screen
 
@@ -294,8 +329,10 @@ bare paper, a heavy black key plate, and overprint where the two inks cross.
 - **Knockouts**, not highlights: holes are made by printing the paper colour back over ink.
 - **Speed is hatching**, not blur — irregular marks crowding the edges of the frame, which is
   how a printed page has always conveyed motion.
-- **Type** is Impact, the closest thing to a poster-weight condensed face that is present on
-  effectively every device without shipping a webfont.
+- **Type** is Anton, an 18 kB OFL latin subset bundled with the game, falling back to Impact.
+  Impact covers iOS and desktop but Android ships no condensed classic, so the masthead and
+  every headline were quietly becoming Roboto on the platform most installs will come from —
+  the entire poster identity degrading on exactly the devices the ads will reach.
 
 The interface follows the same rules: flat ink, hard keylines, square corners, and solid
 offset shadows standing in for a second pass slightly out of register.
@@ -375,7 +412,8 @@ src/render/      canvas renderer, print palette, paper texture
 src/audio/       synthesised music and effects
 src/ads/         AdMob, consent, ATT, pacing
 src/analytics/   event taxonomy and sinks
-test/            simulation, magnet, hazard, level-reachability, balance harness
+test/            simulation, magnet, hazard, level-reachability, opening, onboarding,
+                 streak, record, economy, balance harness
 scripts/         single-file build, screenshots, marketing capture, icons
 ```
 
@@ -394,12 +432,19 @@ Three placements, none of them during play. Detail and the go-live steps are in
 |---|---|---|
 | **Continue** | Rewarded, opt-in | After the drone is destroyed, past 35% of the course, once per run |
 | **Double it** | Rewarded, opt-in | On the results sheet, after the scrap is already banked |
-| Post-results | Interstitial | Only once the results sheet is on screen, and only if pacing allows |
+| Post-results | Interstitial | Only once the results sheet is on screen, pacing allows, **and the rewarded bonus is not being offered** |
 
 Both rewarded placements are offered **after the outcome is already known**, so they add to a
 result rather than withholding one, and the reward is granted on the SDK's completion event
 rather than on dismissal. Interstitials are gated hard: never before a player's fourth
 lifetime run, never within 180s of launch, 120s apart, five a session.
+
+The last gate is the one worth explaining. A results sheet offering "Double it" used to fire
+an interstitial the instant it appeared, so a player reaching for the rewarded bonus could be
+served an interstitial first and watch two ads back to back — the cheaper one teaching them to
+resent the sheet the better one lives on. The rewarded placement pays more and buys goodwill
+instead of spending it, so it wins; the skipped impression is logged with a named reason like
+every other one.
 
 Everything currently runs against Google's test inventory, which always fills and earns
 nothing. Consent, App Tracking Transparency and SDK start-up happen in the order the platforms

@@ -311,7 +311,15 @@ export function settleDailyStreak(
 }
 
 export interface RunSummary {
+  /** The number the player saw on screen. */
   score: number;
+  /**
+   * Scrap actually banked from this run, which is a tenth of the score and tapered on long
+   * endless runs. Kept as its own field because the two were previously both passed as
+   * `score` to different consumers — correct for the contracts that existed, and a trap for
+   * the next one anybody writes.
+   */
+  banked: number;
   won: boolean;
   absorbed: number;
   pressEaten: number;
@@ -366,7 +374,7 @@ export const CONTRACTS: ContractDef[] = [
     text: "Bank scrap",
     target: 8000,
     reward: 4000,
-    measure: (r) => r.score,
+    measure: (r) => r.banked,
   },
   {
     id: "finish",

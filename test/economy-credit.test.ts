@@ -52,7 +52,8 @@ credits.push({ label: "Run haul", amount: banked });
 
 credits.push(
   ...settleContracts(save, {
-    score: banked,
+    score,
+    banked,
     won: true,
     absorbed: 5,
     collected: 40,

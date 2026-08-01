@@ -34,6 +34,7 @@ function check(name: string, ok: boolean, detail = ""): void {
 function naiveRun(): RunSummary {
   return {
     score: 1110,
+    banked: scrapFromScore(1110, true),
     won: false,
     absorbed: 6,
     pressEaten: 0,
@@ -77,7 +78,7 @@ for (let run = 1; run <= 6 && boughtOnRun === 0; run++) {
   save.scrap += banked;
   save.lifetimeScrap += banked;
   save.runs += 1;
-  settleContracts(save, { ...summary, score: banked });
+  settleContracts(save, { ...summary, banked });
   if (save.scrap >= upgradeCost(coil, 0)) boughtOnRun = run;
 }
 
