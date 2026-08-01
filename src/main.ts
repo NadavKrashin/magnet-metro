@@ -15,6 +15,9 @@ import {
   contractById,
   dailyCode,
   earnedSeals,
+  settleDailyStreak,
+  streakAtRisk,
+  streakReward,
   levelsInWorld,
   worldById,
   worldComplete,
@@ -653,9 +656,20 @@ class Game {
 
     const today = dailyCode();
     const done = this.save.dailyDate === today;
+    const streak = this.save.dailyStreak;
+    const atRisk = streakAtRisk(this.save, today);
+    // The streak is the reason to come back, so it is what the button says — and when it is
+    // one day from lapsing, saying so is the entire point of having one.
     el("daily-note").textContent = done
-      ? `Your best today: ${this.save.dailyBest.toLocaleString()}`
-      : "Same course for everyone, once a day";
+      ? streak > 1
+        ? `Day ${streak} · best today ${this.save.dailyBest.toLocaleString()}`
+        : `Your best today: ${this.save.dailyBest.toLocaleString()}`
+      : atRisk
+        ? `Day ${streak} streak — play today to keep it`
+        : streak > 1
+          ? `Longest streak: ${this.save.dailyStreakBest} days`
+          : "Same course for everyone, once a day";
+    el("btn-daily").classList.toggle("nudge", atRisk);
 
     this.shopEl.classList.add("hidden");
     this.hud.classList.add("hidden");
@@ -710,12 +724,30 @@ class Game {
     }
 
     const today = dailyCode();
+    let streak = 0;
+    let streakBroken = false;
     if (this.isDaily) {
       if (this.save.dailyDate !== today) {
         this.save.dailyDate = today;
         this.save.dailyBest = 0;
       }
       this.save.dailyBest = Math.max(this.save.dailyBest, record.score);
+
+      // Once per calendar day, whatever the score. Turning up is the whole ask.
+      const settled = settleDailyStreak(this.save, today);
+      streak = settled.streak;
+      streakBroken = settled.broken;
+      if (settled.advanced) {
+        const bonus = streakReward(settled.streak);
+        this.save.scrap += bonus;
+        credits.push({ label: `Day ${settled.streak} streak`, amount: bonus });
+        this.analytics.track("currency_earned", { amount: bonus, source: "daily_streak" });
+        this.analytics.track("daily_streak", {
+          streak: settled.streak,
+          broken: settled.broken,
+          best: this.save.dailyStreakBest,
+        });
+      }
     }
 
     // Campaign outcome, settled before the results sheet is written so the copy can lead with
@@ -809,6 +841,9 @@ class Game {
             ["Furthest ever", `${Math.floor(this.save.endlessBest).toLocaleString()} m`]] as [string, string][])
         : []),
       ["Mines swallowed", String(w.stats.absorbed)],
+      ...(this.isDaily && streak > 0
+        ? ([["Daily streak", `${streak} day${streak === 1 ? "" : "s"}`]] as [string, string][])
+        : []),
       ...credits.map((c) => [c.label, `+${c.amount.toLocaleString()}`] as [string, string]),
       ["Total in the bank", this.save.scrap.toLocaleString()],
       ...(this.isEndless
@@ -826,8 +861,20 @@ class Game {
     // The concrete next thing, named, with the gap. "Come back tomorrow" is not a reason to
     // return; "1,400 more and the coil gets wider" is.
     const goal = nextGoal(this.save);
+    // A streak is the strongest reason this game has to be opened tomorrow, so on the sheet
+    // that just extended one it outranks everything except finishing a world.
+    const streakLine =
+      streak > 0
+        ? streakBroken && streak === 1
+          ? "<b>Streak restarted — day 1.</b> Come back tomorrow to make it two."
+          : streak === 1
+            ? "<b>Day 1.</b> Play tomorrow's course to start a streak."
+            : `<b>${streak} days in a row.</b> Miss tomorrow and it goes back to one.`
+        : "";
     el("result-goal").innerHTML = sealEarned
       ? `<b>${worldById(level!.world).name} complete.</b> ${sealEarned} earned — it cannot be bought.`
+      : streakLine
+      ? streakLine
       : this.isEndless
       ? endlessFirst
         ? `<b>${endlessDistance.toLocaleString()} m banked.</b> That is now the record to beat.`

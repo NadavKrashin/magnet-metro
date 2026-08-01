@@ -40,6 +40,9 @@ export type EventName =
   | "upgrade_bought"
   | "edition_bought"
   | "contract_completed"
+  // Retention. The distribution of streak lengths is the clearest read there is on whether
+  // the daily is actually bringing anyone back.
+  | "daily_streak"
   // Virality
   | "share_opened"
   | "challenge_opened"

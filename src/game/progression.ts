@@ -258,6 +258,58 @@ export function dailyCode(now: Date = new Date()): string {
   return `DAILY-${y}${m}${d}`;
 }
 
+const DAY_MS = 86_400_000;
+
+/** The calendar day a daily code refers to, or null if it is not one (including ""). */
+export function dateFromDailyCode(code: string): Date | null {
+  const m = /^DAILY-(\d{4})(\d{2})(\d{2})$/.exec(code);
+  if (!m) return null;
+  return new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+}
+
+/** True when the streak is still alive but today has not been played yet. */
+export function streakAtRisk(save: SaveData, today = dailyCode()): boolean {
+  if (save.dailyStreak <= 0 || save.dailyStreakDate === today) return false;
+  const last = dateFromDailyCode(save.dailyStreakDate);
+  const now = dateFromDailyCode(today);
+  return !!last && !!now && now.getTime() - last.getTime() === DAY_MS;
+}
+
+/**
+ * Streak bonus for the first daily run of a day. Capped: an unbroken habit should be worth
+ * having, and a two-month streak should not out-earn actually playing well.
+ */
+export function streakReward(streak: number): number {
+  return 250 * Math.min(streak, 7);
+}
+
+/**
+ * Advance the daily streak, once per calendar day.
+ *
+ * A daily course with nothing accumulating across days gives a player no reason to notice
+ * they missed one — this is the cheapest comeback mechanic the genre has, and it needs no
+ * server because the save already knows what day it last played.
+ */
+export function settleDailyStreak(
+  save: SaveData,
+  today = dailyCode(),
+): { streak: number; advanced: boolean; broken: boolean } {
+  if (save.dailyStreakDate === today) {
+    // Replaying today's course is allowed, but it cannot pay the streak twice.
+    return { streak: save.dailyStreak, advanced: false, broken: false };
+  }
+
+  const last = dateFromDailyCode(save.dailyStreakDate);
+  const now = dateFromDailyCode(today);
+  const consecutive = !!last && !!now && now.getTime() - last.getTime() === DAY_MS;
+  const broken = save.dailyStreak > 0 && !consecutive;
+
+  save.dailyStreak = consecutive ? save.dailyStreak + 1 : 1;
+  save.dailyStreakDate = today;
+  if (save.dailyStreak > save.dailyStreakBest) save.dailyStreakBest = save.dailyStreak;
+  return { streak: save.dailyStreak, advanced: true, broken };
+}
+
 export interface RunSummary {
   score: number;
   won: boolean;
@@ -649,6 +701,10 @@ export interface SaveData {
   runs: number;
   dailyDate: string;
   dailyBest: number;
+  /** Consecutive days a daily run has been played, and the day it was last advanced. */
+  dailyStreak: number;
+  dailyStreakDate: string;
+  dailyStreakBest: number;
   contracts: ActiveContract[];
   /** Furthest distance reached in an endless run, in world units. The record to beat. */
   endlessBest: number;
@@ -673,6 +729,9 @@ function emptySave(): SaveData {
     runs: 0,
     dailyDate: "",
     dailyBest: 0,
+    dailyStreak: 0,
+    dailyStreakDate: "",
+    dailyStreakBest: 0,
     // A new player opens with the starter in slot one, so there is something on the menu they
     // can actually finish today.
     contracts: refillContracts([{ id: "starter", progress: 0 }]),
@@ -699,6 +758,9 @@ export function loadSave(): SaveData {
       runs: Number(parsed.runs) || 0,
       dailyDate: parsed.dailyDate ?? "",
       dailyBest: Number(parsed.dailyBest) || 0,
+      dailyStreak: Number(parsed.dailyStreak) || 0,
+      dailyStreakDate: parsed.dailyStreakDate ?? "",
+      dailyStreakBest: Number(parsed.dailyStreakBest) || 0,
       contracts: refillContracts(parsed.contracts ?? []),
       endlessBest: Number(parsed.endlessBest) || 0,
       endlessBestScore: Number(parsed.endlessBestScore) || 0,
