@@ -61,7 +61,12 @@ export const BIG_VALUE = 50;
 export interface WorldEvents {
   onCollect(comboIndex: number): void;
   onAbsorb(): void;
-  onHit(): void;
+  /**
+   * Something went wrong. A "cell" is a lost life; a "press" is mismatching the closing wall,
+   * which costs the haul rather than the run — a different event that deserves to land
+   * differently in the hand and in the ear.
+   */
+  onHit(kind: "cell" | "press"): void;
   onFlip(toRed: boolean): void;
   /** The player just passed their own furthest distance. */
   onRecord(): void;
@@ -528,7 +533,7 @@ export class World {
     }
     this.burst(h.x, h.y, 26, ink.key);
     this.float(this.player.x, this.player.y + 4, "WRONG COLOUR", ink.key);
-    this.events?.onHit();
+    this.events?.onHit("press");
   }
 
   private takeHit(h: Hazard): void {
@@ -549,7 +554,7 @@ export class World {
     }
     this.burst(h.x, h.y, 22, ink.red);
     this.float(this.player.x, this.player.y + 4, "-" + lost, ink.red);
-    this.events?.onHit();
+    this.events?.onHit("cell");
   }
 
   private updateChain(): void {

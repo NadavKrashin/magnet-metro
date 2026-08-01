@@ -4,6 +4,7 @@ import { Loop } from "./core/loop";
 import { Rng, randomCode, seedFromCode } from "./core/rng";
 import { Renderer } from "./render/renderer";
 import { GameAudio } from "./audio/audio";
+import { haptics } from "./audio/haptics";
 import { autopilot, newAutopilotState, type AutopilotState } from "./game/autopilot";
 import { makeGrainTile } from "./render/texture";
 import { COURSE_LENGTH, OPENING_LENGTH, VIEW_WIDTH, World } from "./game/world";
@@ -324,6 +325,9 @@ class Game {
 
   private applyMute(muted: boolean): void {
     this.audio.setMuted(muted);
+    // Somebody who silenced the game almost certainly wants it silent in the hand too —
+    // muting is usually about not being noticed, and a buzzing phone gives that away.
+    haptics.setEnabled(!muted);
     this.soundEl.textContent = muted ? "Sound off" : "Sound on";
     this.soundEl.classList.toggle("off", muted);
     try {
@@ -416,10 +420,23 @@ class Game {
     this.audio.startMusic();
     this.world.events = {
       onCollect: (comboIndex) => this.audio.collect(comboIndex),
-      onAbsorb: () => this.audio.absorb(),
-      onHit: () => this.audio.hit(),
-      onFlip: (toRed) => this.audio.flip(toRed),
-      onRecord: () => this.audio.record(),
+      onAbsorb: () => {
+        this.audio.absorb();
+        haptics.absorb();
+      },
+      onHit: (kind) => {
+        this.audio.hit();
+        if (kind === "press") haptics.pressCrash();
+        else haptics.hit();
+      },
+      onFlip: (toRed) => {
+        this.audio.flip(toRed);
+        haptics.flip();
+      },
+      onRecord: () => {
+        this.audio.record();
+        haptics.record();
+      },
     };
 
     // Only Free Run has a record to break, and only once there is one. The line is drawn
