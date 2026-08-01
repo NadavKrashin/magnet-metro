@@ -297,6 +297,44 @@ export interface ActiveContract {
   progress: number;
 }
 
+/** One credit to the bank, with the reason attached so it can be shown to the player. */
+export interface ScrapCredit {
+  label: string;
+  amount: number;
+}
+
+/**
+ * Advance contracts against a finished run, pay out anything completed, and draw replacements.
+ *
+ * Pure and outside the UI so the arithmetic can be tested. It used to live in the view layer,
+ * where a play test found the real problem: contracts can pay several thousand at once, the
+ * results sheet only ever showed the run's own haul, and the two used the same label — so the
+ * bank jumped by far more than the number on screen and looked like a bug.
+ */
+export function settleContracts(save: SaveData, run: RunSummary): ScrapCredit[] {
+  const credits: ScrapCredit[] = [];
+
+  for (const active of save.contracts) {
+    const def = contractById(active.id);
+    if (!def || active.progress >= def.target) continue;
+    active.progress += def.measure(run);
+    if (active.progress >= def.target) {
+      save.scrap += def.reward;
+      credits.push({ label: `Contract: ${def.text.toLowerCase()}`, amount: def.reward });
+    }
+  }
+
+  if (credits.length > 0) {
+    save.contracts = refillContracts(
+      save.contracts.filter((a) => {
+        const def = contractById(a.id);
+        return def ? a.progress < def.target : false;
+      }),
+    );
+  }
+  return credits;
+}
+
 export function contractById(id: string): ContractDef | undefined {
   return CONTRACTS.find((c) => c.id === id);
 }

@@ -22,8 +22,9 @@ import {
   modifiersFor,
   nextGoal,
   saveSave,
-  refillContracts,
   scrapFromScore,
+  settleContracts,
+  type ScrapCredit,
   upgradeCost,
   type SaveData,
 } from "./game/progression";
@@ -347,36 +348,6 @@ class Game {
     }
   }
 
-  /** Advance contracts, pay out anything finished, and draw replacements. */
-  private settleContracts(summary: {
-    score: number;
-    won: boolean;
-    absorbed: number;
-    collected: number;
-    maxCombo: number;
-    hits: number;
-  }): string[] {
-    const completed: string[] = [];
-    for (const active of this.save.contracts) {
-      const def = contractById(active.id);
-      if (!def || active.progress >= def.target) continue;
-      active.progress += def.measure(summary);
-      if (active.progress >= def.target) {
-        this.save.scrap += def.reward;
-        completed.push(`${def.text} — +${def.reward.toLocaleString()}`);
-      }
-    }
-    if (completed.length > 0) {
-      this.save.contracts = refillContracts(
-        this.save.contracts.filter((a) => {
-          const def = contractById(a.id);
-          return def ? a.progress < def.target : false;
-        }),
-      );
-    }
-    return completed;
-  }
-
   private startRun(): void {
     this.world = new World(
       seedFromCode(this.seedCode),
@@ -471,6 +442,14 @@ class Game {
     this.save.scrap += bonus;
     saveSave(this.save);
     this.analytics.track("currency_earned", { amount: bonus, source: "rewarded_double" });
+    // The stats table already shows a total; it has to move when the bonus lands, or the
+    // sheet is stale in exactly the way that caused the confusion in the first place.
+    const rows = el("result-stats");
+    const totalRow = Array.from(rows.querySelectorAll("tr")).at(-1);
+    if (totalRow) {
+      const cell = totalRow.querySelector("td:last-child");
+      if (cell) cell.textContent = this.save.scrap.toLocaleString();
+    }
     el<HTMLButtonElement>("btn-double").disabled = true;
     el("result-goal").innerHTML = `<b>+${bonus.toLocaleString()} scrap</b> added. Banked: ${this.save.scrap.toLocaleString()}.`;
     this.audio.unlock();
@@ -641,9 +620,14 @@ class Game {
 
     // Everything scored in a run is banked. A run that only produces a number is over the
     // moment it ends; a run that moves you closer to a wider coil is a reason to start another.
+    // Everything that pays out this run, collected in one place. A play test reported the
+    // bank jumping by thousands after a results sheet that said +250: the run's own haul was
+    // the only credit ever shown, while contracts and level bonuses paid silently.
+    const credits: ScrapCredit[] = [];
     const banked = scrapFromScore(record.score, this.isEndless);
     this.save.scrap += banked;
     this.save.lifetimeScrap += banked;
+    credits.push({ label: this.isEndless ? "Distance haul" : "Run haul", amount: banked });
     this.save.runs += 1;
 
     if (this.isEndless) {
@@ -682,6 +666,7 @@ class Game {
         levelCleared = true;
         this.save.levelsDone += 1;
         this.save.scrap += level.reward;
+        credits.push({ label: `Level ${level.n} cleared`, amount: level.reward });
         if (level.unlockEdition && !this.save.ownedEditions.includes(level.unlockEdition)) {
           this.save.ownedEditions.push(level.unlockEdition);
         }
@@ -690,7 +675,7 @@ class Game {
       this.analytics.track("run_end", { level: level.n, passed });
     }
 
-    const completed = this.settleContracts({
+    const contractCredits = settleContracts(this.save, {
       score: banked,
       won: record.won,
       absorbed: w.stats.absorbed,
@@ -698,6 +683,8 @@ class Game {
       maxCombo: record.maxCombo,
       hits: record.hits,
     });
+    credits.push(...contractCredits);
+    const completed = contractCredits.map((c) => `${c.label} — +${c.amount.toLocaleString()}`);
     saveSave(this.save);
 
     const prior = this.runs.filter((r) => r !== record);
@@ -740,7 +727,8 @@ class Game {
             ["Furthest ever", `${Math.floor(this.save.endlessBest).toLocaleString()} m`]] as [string, string][])
         : []),
       ["Mines swallowed", String(w.stats.absorbed)],
-      ["Scrap banked", `+${banked.toLocaleString()}`],
+      ...credits.map((c) => [c.label, `+${c.amount.toLocaleString()}`] as [string, string]),
+      ["Total in the bank", this.save.scrap.toLocaleString()],
       ...(this.isEndless
         ? []
         : ([["Course reached", `${Math.round((Math.min(this.world.player.y, COURSE_LENGTH) / COURSE_LENGTH) * 100)}%`]] as [string, string][])),
