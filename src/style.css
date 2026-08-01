@@ -745,6 +745,15 @@ button.quiet {
   font-weight: 400;
 }
 
+/* The secondary prompt on a sheet that already has a headline. Set in the red ink so it reads
+   as a separate offer rather than as a continuation of the sentence above it. */
+.goal-second {
+  display: inline-block;
+  margin-top: 5px;
+  color: var(--red);
+  font-weight: 700;
+}
+
 button.daily {
   display: flex;
   flex-direction: column;

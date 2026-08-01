@@ -12,6 +12,7 @@ import {
   EDITIONS,
   UPGRADES,
   LEVELS,
+  affordableUpgrade,
   WORLDS,
   contractById,
   dailyCode,
@@ -903,16 +904,28 @@ class Game {
             ? "<b>Day 1.</b> Play tomorrow's course to start a streak."
             : `<b>${streak} days in a row.</b> Miss tomorrow and it goes back to one.`
         : "";
+
+    // Something affordable in the workshop right now is news, and it is the whole reason the
+    // opening price was cut — a sheet that only ever says "16 m short of your record" never
+    // tells the player the meta exists, and the first purchase is where it hooks. It appends
+    // rather than replaces: the record chase is still the reason to press Run Again.
+    const buyable = affordableUpgrade(this.save);
+    const affordable =
+      buyable && !(goal && goal.kind === "upgrade" && goal.remaining === 0)
+        ? `<br><span class="goal-second">${buyable.label} is affordable — spend it in the workshop.</span>`
+        : "";
+
     el("result-goal").innerHTML = sealEarned
       ? `<b>${worldById(level!.world).name} complete.</b> ${sealEarned} earned — it cannot be bought.`
       : streakLine
-      ? streakLine
+      ? streakLine + affordable
       : this.isEndless
-      ? endlessFirst
-        ? `<b>${endlessDistance.toLocaleString()} m banked.</b> That is now the record to beat.`
-        : endlessRecord
-          ? "<b>Furthest you have ever been.</b> It only gets faster from here."
-          : `<b>${(this.save.endlessBest - endlessDistance).toLocaleString()} m short</b> of your record.`
+      ? (endlessFirst
+          ? `<b>${endlessDistance.toLocaleString()} m banked.</b> That is now the record to beat.`
+          : endlessRecord
+            ? "<b>Furthest you have ever been.</b> It only gets faster from here."
+            : `<b>${(this.save.endlessBest - endlessDistance).toLocaleString()} m short</b> of your record.`) +
+        affordable
       : levelCleared
       ? `<b>+${level!.reward.toLocaleString()} scrap.</b>${level!.unlockEdition ? ` The ${level!.unlockEdition} edition is yours — equip it in the workshop.` : " Next level unlocked."}`
       : level
@@ -921,12 +934,12 @@ class Game {
       ? `<b>Contract complete.</b><br>${completed.join("<br>")}`
       : goal
       ? goal.kind === "level"
-        ? `<b>Next up: ${goal.label}.</b>`
+        ? `<b>Next up: ${goal.label}.</b>${affordable}`
         : goal.kind === "contract"
-          ? `<b>Nearly there:</b> ${goal.label}.`
+          ? `<b>Nearly there:</b> ${goal.label}.${affordable}`
           : goal.remaining === 0
             ? `<b>${goal.label} is affordable now.</b> Spend it in the workshop.`
-            : `<b>${goal.remaining.toLocaleString()} more scrap</b> unlocks ${goal.label}.`
+            : `<b>${goal.remaining.toLocaleString()} more scrap</b> unlocks ${goal.label}.${affordable}`
       : "<b>Everything is bought.</b> Nothing left but a better score.";
 
     el("compare").innerHTML = this.personalSummary();

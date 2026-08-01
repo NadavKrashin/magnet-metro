@@ -817,6 +817,25 @@ export interface NextGoal {
   remaining: number;
 }
 
+/**
+ * The cheapest upgrade the player could buy right now, if any.
+ *
+ * Deliberately independent of `nextGoal`: once somebody is warmed up the campaign becomes the
+ * headline, and a player would otherwise never be told they are carrying enough to buy
+ * something. Money sitting unspent is the meta failing to close.
+ */
+export function affordableUpgrade(save: SaveData): { label: string; cost: number } | null {
+  let best: { label: string; cost: number } | null = null;
+  for (const def of UPGRADES) {
+    const level = levelOf(save, def.id);
+    if (level >= def.maxLevel) continue;
+    const cost = upgradeCost(def, level);
+    if (cost > save.scrap) continue;
+    if (!best || cost < best.cost) best = { label: `${def.name} ${level + 1}`, cost };
+  }
+  return best;
+}
+
 export function nextGoal(save: SaveData): NextGoal | null {
   let best: NextGoal | null = null;
 
