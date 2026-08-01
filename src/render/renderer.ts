@@ -475,7 +475,7 @@ export class Renderer implements View {
     const ctx = this.ctx;
     ctx.save();
     ctx.textAlign = "center";
-    ctx.font = `900 ${Math.round(this.scale * 3.4)}px Impact, "Haettenschweiler", "Arial Narrow", system-ui, sans-serif`;
+    ctx.font = `900 ${Math.round(this.scale * 3.4)}px "Anton", Impact, "Haettenschweiler", "Arial Narrow", system-ui, sans-serif`;
     ctx.lineJoin = "round";
     for (const f of world.floats) {
       const t = f.life / f.maxLife;
