@@ -74,6 +74,20 @@ export interface WorldOptions {
   anchors: boolean;
   /** Give scrap and hazards a red/blue charge. Mechanics that ignore polarity spawn neutral. */
   charged: boolean;
+
+  /**
+   * World modifiers. Each campaign world bends the same generator rather than shipping a
+   * separate one — a different press run off the same plates. Cheap to build, and it keeps
+   * every world benefiting from any tuning done to the core.
+   */
+  /** Multiplies forward speed. Above 1 makes a world feel urgent without changing its layout. */
+  speedScale?: number | undefined;
+  /** Multiplies the gap between patterns. Below 1 crowds the course. */
+  spacingScale?: number | undefined;
+  /** Added to the difficulty term the generator uses, so hazards appear earlier and thicker. */
+  hazardBias?: number | undefined;
+  /** Presses spaced through the course rather than only at the end. */
+  midPresses?: number | undefined;
 }
 
 export class World {
@@ -128,6 +142,7 @@ export class World {
   stats: RunStats = {
     collected: 0,
     absorbed: 0,
+    pressEaten: 0,
     missed: 0,
     hits: 0,
     maxCombo: 0,
@@ -141,6 +156,8 @@ export class World {
   private inPress = false;
   /** Course distance at which the next endless Press is due. */
   private nextPressAt = COURSE_LENGTH * 0.72;
+  /** Reset so a bounded world with mid-course Presses starts counting from the lesson's end. */
+  private pressCursorInit = false;
   private viewHeight = 142;
 
   /** Permanent upgrades bought in the shop. Defaults to an unmodified drone. */
@@ -239,9 +256,12 @@ export class World {
     // Speed climbs hard across the course. A 35% ramp was imperceptible; at 90% the last ten
     // seconds genuinely feel like a different game from the first ten, which is the build the
     // run was missing.
-    p.speed = this.options.endless
-      ? BASE_SPEED * (1 + Math.min(1.35, this.player.y / COURSE_LENGTH * 0.75))
-      : BASE_SPEED * (1 + 0.9 * smoothstep(0.05, 1, this.progress));
+    const worldSpeed = this.options.speedScale ?? 1;
+    p.speed =
+      worldSpeed *
+      (this.options.endless
+        ? BASE_SPEED * (1 + Math.min(1.35, (this.player.y / COURSE_LENGTH) * 0.75))
+        : BASE_SPEED * (1 + 0.9 * smoothstep(0.05, 1, this.progress)));
 
     const prevX = p.x;
     const prevY = p.y;
@@ -413,6 +433,7 @@ export class World {
     this.score += gained;
     this.stats.collected += 1;
     this.stats.absorbed += 1;
+    if (h.press) this.stats.pressEaten += 1;
     this.collectPulse = 1;
 
     // The whole reason to change colour, so it gets the full treatment: a shove, a freeze,
@@ -591,7 +612,21 @@ export class World {
 
     if (y < OPENING_LENGTH) return this.openingLesson(y);
 
+    if (!this.pressCursorInit) {
+      this.pressCursorInit = true;
+      const mid = this.options.midPresses ?? 0;
+      if (mid > 0 && !this.options.endless) {
+        this.nextPressAt = OPENING_LENGTH + (COURSE_LENGTH - OPENING_LENGTH - PRESS_ZONE) / (mid + 1);
+      }
+    }
+
     if (this.options.charged) {
+      const mid = this.options.midPresses ?? 0;
+      if (mid > 0 && !this.options.endless && y >= this.nextPressAt && y < COURSE_LENGTH - PRESS_ZONE - 120) {
+        this.pressPolarity = 0;
+        this.nextPressAt = y + (COURSE_LENGTH - OPENING_LENGTH - PRESS_ZONE) / (mid + 1);
+        return this.press(y);
+      }
       if (this.options.endless) {
         // A Press every so often, so the endless run keeps its best moment on a rhythm rather
         // than losing it along with the finish line. Each one picks a fresh colour.
@@ -629,7 +664,7 @@ export class World {
 
     // Patterns crowd together as difficulty rises: the same shapes with less room to recover
     // between them is a far better difficulty curve than simply adding more mines to each one.
-    const squeeze = 1 - hard * 0.14;
+    const squeeze = (1 - hard * 0.14) * (this.options.spacingScale ?? 1);
 
     if (roll < 0.22 + hard * 0.12) {
       this.gauntlet(y, hard);
@@ -658,8 +693,9 @@ export class World {
   /** Difficulty at an arbitrary point, for generation running ahead of the player. */
   private difficultyAt(y: number): number {
     const laps = y / COURSE_LENGTH;
-    if (!this.options.endless) return smoothstep(0.2, 1, clamp(laps, 0, 1));
-    return smoothstep(0.15, 1, laps) * 0.75 + Math.min(0.45, laps * 0.09);
+    const bias = this.options.hazardBias ?? 0;
+    if (!this.options.endless) return clamp(smoothstep(0.2, 1, clamp(laps, 0, 1)) + bias, 0, 1);
+    return clamp(smoothstep(0.15, 1, laps) * 0.75 + Math.min(0.45, laps * 0.09) + bias, 0, 1);
   }
 
   /**

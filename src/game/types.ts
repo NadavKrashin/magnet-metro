@@ -102,6 +102,8 @@ export interface RunStats {
   collected: number;
   /** Hazards swallowed by matching their colour. The signature act of the game. */
   absorbed: number;
+  /** Of those, how many belonged to a Press. Lets a level ask for the set piece specifically. */
+  pressEaten: number;
   missed: number;
   hits: number;
   maxCombo: number;

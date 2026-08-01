@@ -153,11 +153,19 @@ export function upgradeCost(def: UpgradeDef, currentLevel: number): number {
  * Every pair has to stay unmistakable at speed, so each one separates on hue *and* on
  * lightness, not on hue alone.
  */
+/**
+ * Editions are **earned, never bought**.
+ *
+ * Scrap already buys every upgrade in the game; if it also bought the cosmetics there would be
+ * nothing the campaign alone can give you, and no reason to finish a world once the levels
+ * stopped paying well. Each one is tied to the level that awards it.
+ */
 export interface Edition {
   id: string;
   name: string;
   blurb: string;
-  cost: number;
+  /** The level number that awards it, for the locked caption in the Workshop. */
+  fromLevel: number;
   paper: string;
   paperShade: string;
   blue: string;
@@ -170,7 +178,7 @@ export const EDITIONS: Edition[] = [
     id: "federal",
     name: "Federal",
     blurb: "Printed blue and vermilion on manila stock.",
-    cost: 0,
+    fromLevel: 0,
     paper: "#EDE7D6",
     paperShade: "#DED6C1",
     blue: "#0F5FBF",
@@ -181,7 +189,7 @@ export const EDITIONS: Edition[] = [
     id: "riot",
     name: "Riot",
     blurb: "Fluorescent pink against deep teal.",
-    cost: 6000,
+    fromLevel: 6,
     paper: "#F2EDE4",
     paperShade: "#E0D9CC",
     blue: "#0B7A72",
@@ -192,7 +200,7 @@ export const EDITIONS: Edition[] = [
     id: "nightshift",
     name: "Nightshift",
     blurb: "Warning orange and aubergine on grey board.",
-    cost: 14000,
+    fromLevel: 12,
     paper: "#DDD8CE",
     paperShade: "#C8C2B6",
     blue: "#4B2A6B",
@@ -200,10 +208,21 @@ export const EDITIONS: Edition[] = [
     key: "#100E0C",
   },
   {
+    id: "letterpress",
+    name: "Letterpress",
+    blurb: "Oxblood and moss, bitten deep into cotton rag.",
+    fromLevel: 18,
+    paper: "#E7E2D3",
+    paperShade: "#D3CDBB",
+    blue: "#3A5C3C",
+    red: "#8E2B2B",
+    key: "#14120E",
+  },
+  {
     id: "blueprint",
     name: "Blueprint",
     blurb: "Reversed out: white and cyan on process blue.",
-    cost: 26000,
+    fromLevel: 24,
     paper: "#12325C",
     paperShade: "#0D2647",
     blue: "#EFF4F7",
@@ -228,8 +247,10 @@ export interface RunSummary {
   score: number;
   won: boolean;
   absorbed: number;
+  pressEaten: number;
   collected: number;
   maxCombo: number;
+  actions: number;
   hits: number;
 }
 
@@ -362,42 +383,143 @@ export function refillContracts(active: ActiveContract[]): ActiveContract[] {
  * Objectives are single conditions on purpose. A compound goal is harder to show in a HUD than
  * it is worth, and a player who fails one cannot tell which half they missed.
  */
-export type ObjectiveKind = "finish" | "score" | "absorb" | "flawless" | "combo";
+export type ObjectiveKind =
+  | "finish"
+  | "score"
+  | "absorb"
+  | "flawless"
+  | "combo"
+  | "collect"
+  | "frugal"
+  | "press";
+
+/**
+ * A world is a print run off the same plates: the generator is unchanged, but each one bends
+ * it — faster, denser, more hazardous, more Presses. Building worlds as modifiers rather than
+ * as separate generators means every world keeps benefiting from any tuning done to the core,
+ * and a new one costs a handful of numbers rather than a new content pipeline.
+ */
+export interface WorldDef {
+  id: string;
+  name: string;
+  blurb: string;
+  /** Passed straight through to the simulation. */
+  speedScale?: number;
+  spacingScale?: number;
+  hazardBias?: number;
+  midPresses?: number;
+  /** Awarded for clearing every level in the world. Cannot be bought. */
+  seal: string;
+}
+
+export const WORLDS: WorldDef[] = [
+  {
+    id: "proof",
+    name: "Proof Sheet",
+    blurb: "The first run off the press. Clean stock, room to think.",
+    seal: "Proof Mark",
+  },
+  {
+    id: "nightshift",
+    name: "Night Shift",
+    blurb: "The presses run faster after dark.",
+    speedScale: 1.16,
+    seal: "Night Stamp",
+  },
+  {
+    id: "overprint",
+    name: "Overprint",
+    blurb: "Too much ink, too little paper. Everything crowds in.",
+    spacingScale: 0.82,
+    hazardBias: 0.12,
+    seal: "Overprint Seal",
+  },
+  {
+    id: "final",
+    name: "Final Edition",
+    blurb: "Fast, dense, and the presses never stop coming.",
+    speedScale: 1.2,
+    spacingScale: 0.86,
+    hazardBias: 0.18,
+    midPresses: 2,
+    seal: "Final Plate",
+  },
+];
 
 export interface LevelDef {
   n: number;
+  world: string;
   seed: string;
   kind: ObjectiveKind;
   target: number;
   reward: number;
-  /** Some levels pay out a print edition instead of only scrap. */
+  /** Some levels pay out a print edition. Editions cannot be bought — only earned. */
   unlockEdition?: string;
 }
 
 /**
- * A flawless run sits at level 10, not level 5: once the courses were tightened it stopped
- * being something a stock drone could manage, and an early level that demands upgrades the
- * player has not had time to buy is a wall rather than a lesson.
+ * Twenty-four levels across four worlds.
  *
- * Targets are bracketed by test/levels.test.ts, which plays every course with the autopilot on
- * both a stock and a fully upgraded drone. The first five must be clearable with no upgrades
- * at all; later ones are allowed to require them, because that is what makes the shop matter.
- * A target no one can reach is the one outcome the test refuses.
+ * Objectives rotate deliberately so no world is six of the same request: each world opens on
+ * something reachable, closes on its hardest ask, and covers at least four different kinds in
+ * between. A world of nothing but score targets is just the same level six times.
+ *
+ * Targets are bracketed by test/levels.test.ts, which plays every one with the autopilot on
+ * both a stock and a fully upgraded drone. The first world must be clearable with no upgrades
+ * at all; later ones may require them, because that is what makes the shop matter. A target
+ * nobody can reach is the one outcome the test refuses.
  */
 export const LEVELS: LevelDef[] = [
-  { n: 1, seed: "LVL-0001", kind: "finish", target: 1, reward: 400 },
-  { n: 2, seed: "LVL-0002", kind: "score", target: 6000, reward: 600 },
-  { n: 3, seed: "LVL-0003", kind: "absorb", target: 8, reward: 800 },
-  { n: 4, seed: "LVL-0004", kind: "score", target: 12000, reward: 1000 },
-  { n: 5, seed: "LVL-0005", kind: "absorb", target: 14, reward: 1600 },
-  { n: 6, seed: "LVL-0006", kind: "absorb", target: 20, reward: 1400, unlockEdition: "riot" },
-  { n: 7, seed: "LVL-0007", kind: "score", target: 20000, reward: 1800 },
-  { n: 8, seed: "LVL-0008", kind: "combo", target: 150, reward: 2000 },
-  { n: 9, seed: "LVL-0009", kind: "score", target: 30000, reward: 2400 },
-  { n: 10, seed: "LVL-0010", kind: "flawless", target: 1, reward: 2800, unlockEdition: "nightshift" },
-  { n: 11, seed: "LVL-0011", kind: "combo", target: 210, reward: 3200 },
-  { n: 12, seed: "LVL-0012", kind: "score", target: 45000, reward: 6000, unlockEdition: "blueprint" },
+  // Proof Sheet — learn the rule, no upgrades assumed.
+  { n: 1, world: "proof", seed: "LVL-0001", kind: "finish", target: 1, reward: 400 },
+  { n: 2, world: "proof", seed: "LVL-0002", kind: "score", target: 6000, reward: 600 },
+  { n: 3, world: "proof", seed: "LVL-0003", kind: "absorb", target: 8, reward: 800 },
+  { n: 4, world: "proof", seed: "LVL-0004", kind: "collect", target: 70, reward: 900 },
+  { n: 5, world: "proof", seed: "LVL-0005", kind: "absorb", target: 14, reward: 1100 },
+  { n: 6, world: "proof", seed: "LVL-0006", kind: "score", target: 14000, reward: 1400, unlockEdition: "riot" },
+
+  // Night Shift — everything arrives sooner.
+  { n: 7, world: "nightshift", seed: "LVL-0007", kind: "finish", target: 1, reward: 1200 },
+  { n: 8, world: "nightshift", seed: "LVL-0008", kind: "combo", target: 120, reward: 1500 },
+  { n: 9, world: "nightshift", seed: "LVL-0009", kind: "press", target: 18, reward: 1700 },
+  { n: 10, world: "nightshift", seed: "LVL-0010", kind: "collect", target: 110, reward: 1900 },
+  { n: 11, world: "nightshift", seed: "LVL-0011", kind: "score", target: 22000, reward: 2100 },
+  { n: 12, world: "nightshift", seed: "LVL-0012", kind: "flawless", target: 1, reward: 2600, unlockEdition: "nightshift" },
+
+  // Overprint — the screen is busy and the gaps are thin.
+  { n: 13, world: "overprint", seed: "LVL-0013", kind: "finish", target: 1, reward: 1800 },
+  { n: 14, world: "overprint", seed: "LVL-0014", kind: "absorb", target: 20, reward: 2200 },
+  { n: 15, world: "overprint", seed: "LVL-0015", kind: "frugal", target: 26, reward: 2500 },
+  { n: 16, world: "overprint", seed: "LVL-0016", kind: "score", target: 30000, reward: 2800 },
+  { n: 17, world: "overprint", seed: "LVL-0017", kind: "combo", target: 190, reward: 3100 },
+  { n: 18, world: "overprint", seed: "LVL-0018", kind: "press", target: 16, reward: 3600, unlockEdition: "letterpress" },
+
+  // Final Edition — everything at once.
+  { n: 19, world: "final", seed: "LVL-0019", kind: "finish", target: 1, reward: 2600 },
+  { n: 20, world: "final", seed: "LVL-0020", kind: "collect", target: 150, reward: 3200 },
+  { n: 21, world: "final", seed: "LVL-0021", kind: "absorb", target: 28, reward: 3600 },
+  { n: 22, world: "final", seed: "LVL-0022", kind: "frugal", target: 30, reward: 4000 },
+  { n: 23, world: "final", seed: "LVL-0023", kind: "score", target: 42000, reward: 4600 },
+  { n: 24, world: "final", seed: "LVL-0024", kind: "press", target: 30, reward: 8000, unlockEdition: "blueprint" },
 ];
+
+export function worldById(id: string): WorldDef {
+  return WORLDS.find((w) => w.id === id) ?? WORLDS[0]!;
+}
+
+export function levelsInWorld(id: string): LevelDef[] {
+  return LEVELS.filter((l) => l.world === id);
+}
+
+/** True once every level in a world has been cleared, which is what awards its seal. */
+export function worldComplete(save: SaveData, id: string): boolean {
+  const levels = levelsInWorld(id);
+  return levels.length > 0 && levels.every((l) => save.levelsDone >= l.n);
+}
+
+export function earnedSeals(save: SaveData): string[] {
+  return WORLDS.filter((w) => worldComplete(save, w.id)).map((w) => w.seal);
+}
 
 export function describeObjective(level: LevelDef): string {
   switch (level.kind) {
@@ -411,13 +533,28 @@ export function describeObjective(level: LevelDef): string {
       return "Finish without losing a cell";
     case "combo":
       return `Hold a chain of ${level.target}`;
+    case "collect":
+      return `Pull in ${level.target} pieces`;
+    case "frugal":
+      return `Finish on ${level.target} colour changes or fewer`;
+    case "press":
+      return `Swallow ${level.target} of the Press`;
   }
 }
 
 /** Live progress toward the objective, for the heads-up display during a level run. */
 export function objectiveProgress(
   level: LevelDef,
-  now: { score: number; absorbed: number; maxCombo: number; hits: number; progress: number },
+  now: {
+    score: number;
+    absorbed: number;
+    pressEaten: number;
+    collected: number;
+    maxCombo: number;
+    actions: number;
+    hits: number;
+    progress: number;
+  },
 ): { text: string; done: boolean } {
   switch (level.kind) {
     case "finish":
@@ -433,6 +570,16 @@ export function objectiveProgress(
       return { text: now.hits === 0 ? "CLEAN" : "FAILED", done: now.hits === 0 };
     case "combo":
       return { text: `${now.maxCombo}/${level.target}`, done: now.maxCombo >= level.target };
+    case "collect":
+      return { text: `${now.collected}/${level.target}`, done: now.collected >= level.target };
+    case "frugal":
+      // Counts down, because what matters is how many you have left to spend.
+      return {
+        text: `${Math.max(0, level.target - now.actions)} left`,
+        done: now.actions <= level.target,
+      };
+    case "press":
+      return { text: `${now.pressEaten}/${level.target}`, done: now.pressEaten >= level.target };
   }
 }
 
@@ -448,6 +595,13 @@ export function levelPassed(level: LevelDef, r: RunSummary): boolean {
       return r.won && r.hits === 0;
     case "combo":
       return r.maxCombo >= level.target;
+    case "collect":
+      return r.collected >= level.target;
+    // Frugal only counts on a finished course: quitting early would otherwise pass it trivially.
+    case "frugal":
+      return r.won && r.actions <= level.target;
+    case "press":
+      return r.pressEaten >= level.target;
   }
 }
 
@@ -575,12 +729,5 @@ export function nextGoal(save: SaveData): { label: string; remaining: number } |
     }
   }
 
-  for (const ed of EDITIONS) {
-    if (save.ownedEditions.includes(ed.id)) continue;
-    const remaining = ed.cost - save.scrap;
-    if (remaining > 0 && (!best || remaining < best.remaining)) {
-      best = { label: `the ${ed.name} edition`, remaining };
-    }
-  }
   return best;
 }

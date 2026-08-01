@@ -50,7 +50,7 @@ await page.evaluate(() => {
       ownedEditions: ["federal", "riot"],
       edition: "federal",
       runs: 7,
-      levelsDone: 4,
+      levelsDone: 8,
     }),
   );
 });

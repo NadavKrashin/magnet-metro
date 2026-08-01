@@ -11,8 +11,13 @@ import {
   EDITIONS,
   UPGRADES,
   LEVELS,
+  WORLDS,
   contractById,
   dailyCode,
+  earnedSeals,
+  levelsInWorld,
+  worldById,
+  worldComplete,
   describeObjective,
   levelPassed,
   objectiveProgress,
@@ -349,9 +354,23 @@ class Game {
   }
 
   private startRun(): void {
+    const lvl = this.levelIndex >= 0 ? LEVELS[this.levelIndex] : undefined;
+    const wd = lvl ? worldById(lvl.world) : undefined;
     this.world = new World(
       seedFromCode(this.seedCode),
-      { ...this.active.worldOptions, endless: this.isEndless },
+      {
+        ...this.active.worldOptions,
+        endless: this.isEndless,
+        // A world is the same generator run differently, so its character travels with the run.
+        ...(wd
+          ? {
+              speedScale: wd.speedScale,
+              spacingScale: wd.spacingScale,
+              hazardBias: wd.hazardBias,
+              midPresses: wd.midPresses,
+            }
+          : {}),
+      },
       modifiersFor(this.save),
     );
     this.buildIntegrity();
@@ -535,32 +554,53 @@ class Game {
 
     const list = el("level-list");
     list.innerHTML = "";
-    for (let i = 0; i < LEVELS.length; i++) {
-      const lv = LEVELS[i]!;
-      const done = i < this.save.levelsDone;
-      // Strictly sequential: exactly one level is ever the next thing to do.
-      const locked = i > this.save.levelsDone;
 
-      const btn = document.createElement("button");
-      btn.className = done ? "level done" : "level";
-      btn.disabled = locked;
-      const prize = lv.unlockEdition
-        ? `+${lv.reward.toLocaleString()} scrap · ${lv.unlockEdition} edition`
-        : `+${lv.reward.toLocaleString()} scrap`;
-      btn.innerHTML =
-        `<span class="level-n">${lv.n}</span>` +
-        `<span class="level-body"><span class="level-goal">${describeObjective(lv)}</span>` +
-        `<div class="level-prize">${done ? "COMPLETE" : locked ? "LOCKED" : prize}</div></span>`;
-      btn.addEventListener("click", () => {
-        this.levelIndex = i;
-        this.isDaily = false;
-        this.isEndless = false;
-        this.seedCode = lv.seed;
-        this.seedInput.value = lv.seed;
-        this.levelsEl.classList.add("hidden");
-        this.startRun();
-      });
-      list.appendChild(btn);
+    for (const wd of WORLDS) {
+      const levels = levelsInWorld(wd.id);
+      const first = levels[0];
+      if (!first) continue;
+      // A world opens once its first level is reachable, so the list always shows what is next
+      // without dumping twenty-four rows on someone who has cleared three.
+      const unlocked = this.save.levelsDone >= first.n - 1;
+      const done = worldComplete(this.save, wd.id);
+      const cleared = levels.filter((l) => this.save.levelsDone >= l.n).length;
+
+      const head = document.createElement("div");
+      head.className = done ? "world-head done" : "world-head";
+      head.innerHTML =
+        `<div class="world-name">${wd.name}</div>` +
+        `<div class="world-blurb">${unlocked ? wd.blurb : "Locked"}</div>` +
+        `<div class="world-count">${cleared}/${levels.length}${done ? ` · ${wd.seal} earned` : ""}</div>`;
+      list.appendChild(head);
+
+      if (!unlocked) continue;
+
+      for (const lv of levels) {
+        const i = LEVELS.indexOf(lv);
+        const levelDone = i < this.save.levelsDone;
+        // Strictly sequential: exactly one level is ever the next thing to do.
+        const locked = i > this.save.levelsDone;
+
+        const btn = document.createElement("button");
+        btn.className = levelDone ? "level done" : "level";
+        btn.disabled = locked;
+        const prize = lv.unlockEdition
+          ? `+${lv.reward.toLocaleString()} · ${lv.unlockEdition} edition`
+          : `+${lv.reward.toLocaleString()} scrap`;
+        btn.innerHTML =
+          `<span class="level-n">${lv.n}</span>` +
+          `<span class="level-body"><span class="level-goal">${describeObjective(lv)}</span>` +
+          `<div class="level-prize">${levelDone ? "COMPLETE" : locked ? "LOCKED" : prize}</div></span>`;
+        btn.addEventListener("click", () => {
+          this.levelIndex = i;
+          this.isDaily = false;
+          this.isEndless = false;
+          this.seedCode = lv.seed;
+          this.levelsEl.classList.add("hidden");
+          this.startRun();
+        });
+        list.appendChild(btn);
+      }
     }
   }
 
@@ -578,10 +618,10 @@ class Game {
         ? `Furthest: ${Math.floor(this.save.endlessBest).toLocaleString()} m`
         : "No finish line. Beat your own distance.";
 
-    el("levels-note").textContent =
-      this.save.levelsDone >= total
-        ? "All twelve cleared"
-        : `Level ${this.save.levelsDone + 1} of ${total}`;
+    const next = LEVELS[this.save.levelsDone];
+    el("levels-note").textContent = next
+      ? `${worldById(next.world).name} · level ${next.n} of ${total}`
+      : `All ${total} cleared · every seal earned`;
 
     const today = dailyCode();
     const done = this.save.dailyDate === today;
@@ -651,13 +691,16 @@ class Game {
     // it. A level is the clearest goal the player has; it should be the headline, not a note.
     const level = this.levelIndex >= 0 ? LEVELS[this.levelIndex] : undefined;
     let levelCleared = false;
+    let sealEarned = "";
     if (level) {
       const passed = levelPassed(level, {
         score: record.score,
         won: record.won,
         absorbed: w.stats.absorbed,
+        pressEaten: w.stats.pressEaten,
         collected: record.collected,
         maxCombo: record.maxCombo,
+        actions: record.actions,
         hits: record.hits,
       });
       // Only the frontier level advances progress; replaying an earlier one pays nothing, so
@@ -667,6 +710,9 @@ class Game {
         this.save.levelsDone += 1;
         this.save.scrap += level.reward;
         credits.push({ label: `Level ${level.n} cleared`, amount: level.reward });
+        if (worldComplete(this.save, level.world)) {
+          sealEarned = worldById(level.world).seal;
+        }
         if (level.unlockEdition && !this.save.ownedEditions.includes(level.unlockEdition)) {
           this.save.ownedEditions.push(level.unlockEdition);
         }
@@ -679,8 +725,10 @@ class Game {
       score: banked,
       won: record.won,
       absorbed: w.stats.absorbed,
+      pressEaten: w.stats.pressEaten,
       collected: record.collected,
       maxCombo: record.maxCombo,
+      actions: record.actions,
       hits: record.hits,
     });
     credits.push(...contractCredits);
@@ -740,7 +788,9 @@ class Game {
     // The concrete next thing, named, with the gap. "Come back tomorrow" is not a reason to
     // return; "1,400 more and the coil gets wider" is.
     const goal = nextGoal(this.save);
-    el("result-goal").innerHTML = this.isEndless
+    el("result-goal").innerHTML = sealEarned
+      ? `<b>${worldById(level!.world).name} complete.</b> ${sealEarned} earned — it cannot be bought.`
+      : this.isEndless
       ? endlessRecord
         ? "<b>Furthest you have ever been.</b> It only gets faster from here."
         : `<b>${(this.save.endlessBest - endlessDistance).toLocaleString()} m short</b> of your record.`
@@ -875,11 +925,38 @@ class Game {
     }
   }
 
+  /**
+   * A short personal record, plus any seals earned. Seals exist only for clearing a whole
+   * world, so they are the one thing on the sheet that scrap can never produce.
+   */
+  private personalSummary(): string {
+    const rs = this.runs;
+    const seals = earnedSeals(this.save);
+    const lines: string[] = [];
+    if (rs.length > 0) {
+      const best = Math.max(...rs.map((r) => r.score));
+      lines.push(
+        `<b>${rs.length}</b> run${rs.length === 1 ? "" : "s"} · best <b>${best.toLocaleString()}</b>`,
+      );
+    }
+    lines.push(
+      `Levels <b>${this.save.levelsDone}/${LEVELS.length}</b> · lifetime scrap <b>${this.save.lifetimeScrap.toLocaleString()}</b>`,
+    );
+    if (this.save.endlessBest > 0) {
+      lines.push(`Furthest <b>${Math.floor(this.save.endlessBest).toLocaleString()} m</b>`);
+    }
+    if (seals.length > 0) lines.push(`Seals: <b>${seals.join(" · ")}</b>`);
+    return lines.join("<br>");
+  }
+
+  /**
+   * Editions are earned in the campaign, never bought, so this tab is a display case rather
+   * than a shop: owned ones can be equipped, locked ones name the level that awards them.
+   */
   private renderEditions(list: HTMLElement): void {
     for (const ed of EDITIONS) {
       const owned = this.save.ownedEditions.includes(ed.id);
       const equipped = this.save.edition === ed.id;
-      const affordable = this.save.scrap >= ed.cost;
 
       const row = document.createElement("div");
       row.className = owned ? "item owned" : "item";
@@ -889,25 +966,19 @@ class Game {
       swatch.style.background = ed.paper;
       swatch.innerHTML =
         `<i style="background:${ed.blue}"></i><i style="background:${ed.red}"></i>`;
+      if (!owned) swatch.style.filter = "grayscale(1)";
 
       const body = document.createElement("div");
       body.className = "item-body";
       body.innerHTML =
         `<div class="item-name">${ed.name}</div>` +
-        `<div class="item-blurb">${ed.blurb}</div>`;
+        `<div class="item-blurb">${owned ? ed.blurb : `Awarded for clearing level ${ed.fromLevel}.`}</div>`;
 
       const buy = document.createElement("button");
       buy.className = equipped ? "buy equipped" : "buy";
-      buy.textContent = equipped ? "ON" : owned ? "USE" : ed.cost.toLocaleString();
-      buy.disabled = !owned && !affordable;
+      buy.textContent = equipped ? "ON" : owned ? "USE" : "LOCKED";
+      buy.disabled = !owned;
       buy.addEventListener("click", () => {
-        if (!owned) {
-          if (this.save.scrap < ed.cost) return;
-          this.save.scrap -= ed.cost;
-          this.save.ownedEditions.push(ed.id);
-          this.analytics.track("currency_spent", { amount: ed.cost, sink: `edition_${ed.id}` });
-          this.analytics.track("edition_bought", { id: ed.id });
-        }
         this.save.edition = ed.id;
         saveSave(this.save);
         // Re-print everything: the canvas plates and the interface both follow the stock.
@@ -921,22 +992,6 @@ class Game {
       row.append(swatch, body, buy);
       list.appendChild(row);
     }
-  }
-
-  /** A short personal record. What the player is actually measuring themselves against. */
-  private personalSummary(): string {
-    const rs = this.runs;
-    if (rs.length === 0) return "";
-    const best = Math.max(...rs.map((r) => r.score));
-    const cleared = rs.filter((r) => r.won).length;
-    const lines = [
-      `<b>${rs.length}</b> run${rs.length === 1 ? "" : "s"} · best <b>${best.toLocaleString()}</b> · <b>${cleared}</b> cleared`,
-      `Levels <b>${this.save.levelsDone}/${LEVELS.length}</b> · lifetime scrap <b>${this.save.lifetimeScrap.toLocaleString()}</b>`,
-    ];
-    if (this.save.dailyDate === dailyCode() && this.save.dailyBest > 0) {
-      lines.push(`Today's best <b>${this.save.dailyBest.toLocaleString()}</b>`);
-    }
-    return lines.join("<br>");
   }
 
   private update = (dt: number): void => {
@@ -1008,7 +1063,10 @@ class Game {
       const prog = objectiveProgress(level, {
         score: w.score,
         absorbed: w.stats.absorbed,
+        pressEaten: w.stats.pressEaten,
+        collected: w.stats.collected,
         maxCombo: w.stats.maxCombo,
+        actions: w.stats.actions,
         hits: w.stats.hits,
         progress: w.progress,
       });

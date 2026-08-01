@@ -56,6 +56,8 @@ credits.push(
     won: true,
     absorbed: 5,
     collected: 40,
+    pressEaten: 0,
+    actions: 12,
     maxCombo: 20,
     hits: 1,
   }),

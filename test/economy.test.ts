@@ -6,7 +6,7 @@
  * against a 287,000 shop — nine runs to own everything, which would have silently undone every
  * other economy decision. This asserts the shape rather than the exact numbers.
  */
-import { EDITIONS, UPGRADES, scrapFromScore, upgradeCost } from "../src/game/progression";
+import { UPGRADES, scrapFromScore, upgradeCost } from "../src/game/progression";
 
 let failures = 0;
 function check(name: string, ok: boolean, detail = ""): void {
@@ -18,8 +18,8 @@ function check(name: string, ok: boolean, detail = ""): void {
 }
 
 let shop = 0;
+// Editions are earned in the campaign, not bought, so the shop is upgrades only.
 for (const d of UPGRADES) for (let l = 0; l < d.maxLevel; l++) shop += upgradeCost(d, l);
-for (const e of EDITIONS) shop += e.cost;
 
 console.log("Economy checks\n");
 console.log(`  full shop: ${shop.toLocaleString()} scrap\n`);

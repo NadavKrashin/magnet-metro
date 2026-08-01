@@ -739,8 +739,27 @@ button.daily {
   display: flex;
   flex-direction: column;
   gap: 3px;
-  margin-top: 16px;
-  padding: 15px 10px;
+  margin-top: 12px;
+  padding: 13px 10px;
+}
+
+/* The campaign is the game's spine, so it is the only thing on the menu at this weight. */
+button.headline {
+  margin-top: 18px;
+  padding: 22px 12px 18px;
+  font-size: 32px;
+  box-shadow: 7px 7px 0 var(--key);
+}
+
+button.headline .daily-note {
+  font-size: 10.5px;
+  opacity: 1;
+}
+
+.menu-secondary {
+  margin-top: 18px;
+  padding-top: 4px;
+  border-top: 3px solid var(--key);
 }
 
 .daily-note {
@@ -836,6 +855,38 @@ body.demo .progress {
 
 .objective.done #objective-progress {
   color: var(--blue);
+}
+
+/* A world header: names the run and shows how much of it is done. */
+.world-head {
+  margin-top: 6px;
+  padding: 9px 11px;
+  border: 3px solid var(--key);
+  background: var(--paper-2);
+}
+
+.world-head.done {
+  box-shadow: 4px 4px 0 var(--blue);
+}
+
+.world-name {
+  font-family: var(--display);
+  font-size: 21px;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.world-blurb {
+  font-size: 11.5px;
+  line-height: 1.35;
+  margin-top: 3px;
+}
+
+.world-count {
+  font-family: var(--mono);
+  font-size: 10px;
+  margin-top: 4px;
+  font-variant-numeric: tabular-nums;
 }
 
 .level-list {

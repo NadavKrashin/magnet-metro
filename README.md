@@ -61,7 +61,7 @@ nobody preferred.
 
 | Mode | What it is |
 |---|---|
-| **Levels** | Twelve fixed courses, one named objective each, unlocked in order, paying scrap and print editions |
+| **Levels** | The main mode. Four worlds, twenty-four courses, one named objective each |
 | **Today's Run** | One course per calendar day, identical for everyone |
 | **Free Run** | Endless. No finish line, difficulty climbs forever, and the only goal is to beat your own distance |
 
@@ -76,14 +76,42 @@ finished, Presses recur on a rhythm as milestones rather than as an ending, and 
 bar measures the run against the player's own record instead of a finish line. Speed is capped
 so a long run stays reactable rather than becoming a slideshow.
 
-Levels answer the question the endless run cannot: *what am I supposed to do next.* Objectives
-are single conditions on purpose — a compound goal is harder to show in a HUD than it is
-worth, and a player who fails one cannot tell which half they missed.
+## The campaign
 
-`test/levels.test.ts` plays every level with the autopilot on both a stock and a fully
-upgraded drone. The first five must be clearable with no upgrades; later ones may require
-them, because that is what makes the shop matter. It has already caught three impossible
-targets and two trivial ones.
+Levels answer the question the endless run cannot: *what am I supposed to do next.* It is the
+headline on the menu, and everything else is secondary to it.
+
+**Four worlds, six levels each.** A world is the same generator run differently rather than a
+separate content pipeline — which costs a handful of numbers instead of a new authoring tool,
+and keeps every world benefiting from any tuning done to the core.
+
+| World | Character |
+|---|---|
+| **Proof Sheet** | The baseline. Clearable with nothing bought. |
+| **Night Shift** | 16% faster. Same layouts, far less time to read them. |
+| **Overprint** | Patterns crowd together, hazards start earlier and thicker. |
+| **Final Edition** | Fast, dense, and Presses arrive mid-course as well as at the end. |
+
+**Eight objective kinds**, rotated so no world is six of the same request: reach the end,
+score, swallow, pull in, hold a chain, finish clean, swallow the Press, and finish on a budget
+of colour changes. Each is a single condition on purpose — a compound goal is hard to show in
+a HUD, and a player who fails one cannot tell which half they missed.
+
+### Rewards you cannot buy
+
+Scrap already buys every upgrade. If it also bought the cosmetics there would be nothing the
+campaign alone could give, and no reason to finish a world once the levels stopped paying well.
+So two things are campaign-only:
+
+- **Editions** — five palette swaps, each awarded by a specific level. The Workshop's editions
+  tab is a display case, not a shop: locked ones name the level that grants them.
+- **Seals** — one per world, for clearing all six of its levels. They appear on the results
+  sheet and cannot be earned any other way.
+
+`test/levels.test.ts` plays every level **under its own world's modifiers** with the autopilot,
+on both a stock and a fully upgraded drone. The opening world must be clearable with no
+upgrades; later ones may require them, because that is what makes the shop matter. It has
+caught seven impossible targets and two trivial ones so far.
 
 ## The colour rule
 
