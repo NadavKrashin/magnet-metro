@@ -364,6 +364,9 @@ class Game {
       {
         ...this.active.worldOptions,
         endless: this.isEndless,
+        // Free Run only. A level, a daily or a shared course has to generate identically for
+        // everyone who plays it, so their opening never depends on the player's save.
+        shortOpening: this.isEndless && this.knowsTheRule(),
         // A world is the same generator run differently, so its character travels with the run.
         ...(wd
           ? {
@@ -418,6 +421,18 @@ class Game {
     this.menuEl.classList.add("hidden");
     this.resultsEl.classList.add("hidden");
     this.hud.classList.remove("hidden");
+  }
+
+  /**
+   * Whether this player has demonstrably learned the colour rule.
+   *
+   * The scripted lesson is eight seconds at the head of every run, and this genre's whole
+   * loop is measured in seconds — on run fifteen a quarter of the run is a classroom the
+   * player graduated from days ago. The same threshold the menu already uses to decide the
+   * campaign is worth offering, on the same reasoning.
+   */
+  private knowsTheRule(): boolean {
+    return this.save.runs >= 3 || this.save.levelsDone > 0;
   }
 
   /** A continue is only worth offering on a real loss, deep enough in, once per run. */
@@ -859,7 +874,11 @@ class Game {
     });
 
     // The two milestones that decide whether a new player ever comes back at all.
-    if (w.player.y >= OPENING_LENGTH) this.analytics.track("tutorial_completed", {});
+    // Only the full lesson counts: a warm-up nobody was being taught by is not a tutorial
+    // completion, and counting it would flatter the one funnel metric that has to stay honest.
+    if (!w.options.shortOpening && w.player.y >= OPENING_LENGTH) {
+      this.analytics.track("tutorial_completed", {});
+    }
     if (record.won && this.save.runs === 1) this.analytics.track("first_run_completed", {});
     if (levelCleared && level) {
       this.analytics.track("level_cleared", {

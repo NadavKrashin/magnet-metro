@@ -1,6 +1,6 @@
 import type { InputState } from "../core/input";
 import type { View } from "../render/view";
-import { COURSE_LENGTH, OPENING_LENGTH, PRESS_ZONE, type World } from "../game/world";
+import { COURSE_LENGTH, PRESS_ZONE, type World } from "../game/world";
 import type { Polarity } from "../game/types";
 import { TAU } from "../core/math";
 import { inkFor } from "../render/palette";
@@ -70,6 +70,20 @@ export class PolarityMechanic implements Mechanic {
     const y = world.player.y;
     world.promptUrgent = false;
 
+    // A compressed opening is a warm-up, not a lesson. Teaching captions belong to the run
+    // that is actually teaching; replayed for the hundredth time they are just clutter over
+    // the first eight seconds of every single run.
+    if (world.options.shortOpening) {
+      world.prompt = this.pressNearby(world)
+        ? this.polarity === world.pressPolarity
+          ? "THE PRESS — EAT IT ALL"
+          : "THE PRESS — TAP TO MATCH IT"
+        : "";
+      world.promptUrgent =
+        world.prompt.length > 0 && this.polarity !== world.pressPolarity;
+      return;
+    }
+
     // Keyed off the current colour rather than off what the player has done before, so every
     // prompt stays correct for someone who taps early, taps back, or taps at random.
     if (y < 70) {
@@ -90,7 +104,7 @@ export class PolarityMechanic implements Mechanic {
         world.prompt = "TAP! MATCH THE MINES TO EAT THEM";
         world.promptUrgent = true;
       }
-    } else if (y < OPENING_LENGTH) {
+    } else if (y < world.openingLength) {
       world.prompt = "YOUR COLOUR FEEDS YOU · THE OTHER HURTS";
     } else if (this.pressNearby(world)) {
       // Called well before the wall is reachable. The whole point of the set piece is that

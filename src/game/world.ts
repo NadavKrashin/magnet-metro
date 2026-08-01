@@ -43,6 +43,8 @@ export const PRESS_ZONE = 150;
 const PRESS_INTERVAL = 1150;
 /** Course distance given over to the scripted teaching sequence. */
 export const OPENING_LENGTH = 290;
+/** The compressed warm-up that replaces the lesson once the save shows the rule is learned. */
+export const SHORT_OPENING_LENGTH = 90;
 /** Absorbing a matching hazard is worth this much before the combo multiplier. */
 const HAZARD_ABSORB_VALUE = 60;
 /** Base worth of an ordinary piece. Deliberately not 1: a score that climbs in tens reads as
@@ -88,6 +90,15 @@ export interface WorldOptions {
   hazardBias?: number | undefined;
   /** Presses spaced through the course rather than only at the end. */
   midPresses?: number | undefined;
+
+  /**
+   * Replace the full scripted lesson with a short hazard-free warm-up. The lesson is the
+   * right opening for someone who has never seen the colour rule work, and eight seconds of
+   * classroom at the top of every single run for someone who graduated days ago — set by the
+   * caller once the save shows the rule has landed. Only ever applied to Free Run: levels,
+   * dailies and shared courses must build identically for every player, learned or not.
+   */
+  shortOpening?: boolean | undefined;
 }
 
 export class World {
@@ -207,6 +218,11 @@ export class World {
 
   get progress(): number {
     return clamp(this.player.y / COURSE_LENGTH, 0, 1);
+  }
+
+  /** Where the scripted opening ends for this run. Prompts and tests both key off this. */
+  get openingLength(): number {
+    return this.options.shortOpening ? SHORT_OPENING_LENGTH : OPENING_LENGTH;
   }
 
   /**
@@ -617,13 +633,13 @@ export class World {
   private spawnPattern(y: number): number {
     const rng = this.rng;
 
-    if (y < OPENING_LENGTH) return this.openingLesson(y);
+    if (y < this.openingLength) return this.openingLesson(y);
 
     if (!this.pressCursorInit) {
       this.pressCursorInit = true;
       const mid = this.options.midPresses ?? 0;
       if (mid > 0 && !this.options.endless) {
-        this.nextPressAt = OPENING_LENGTH + (COURSE_LENGTH - OPENING_LENGTH - PRESS_ZONE) / (mid + 1);
+        this.nextPressAt = this.openingLength + (COURSE_LENGTH - this.openingLength - PRESS_ZONE) / (mid + 1);
       }
     }
 
@@ -631,7 +647,7 @@ export class World {
       const mid = this.options.midPresses ?? 0;
       if (mid > 0 && !this.options.endless && y >= this.nextPressAt && y < COURSE_LENGTH - PRESS_ZONE - 120) {
         this.pressPolarity = 0;
-        this.nextPressAt = y + (COURSE_LENGTH - OPENING_LENGTH - PRESS_ZONE) / (mid + 1);
+        this.nextPressAt = y + (COURSE_LENGTH - this.openingLength - PRESS_ZONE) / (mid + 1);
         return this.press(y);
       }
       if (this.options.endless) {
@@ -735,6 +751,14 @@ export class World {
     if (!this.options.charged) {
       this.scrapArc(y, this.rng.range(-14, 14), 7, 0, 12);
       return 55;
+    }
+
+    // A player who already knows the rule gets a thumb-on-the-glass beat instead of a lesson:
+    // both colours present from the first second, nothing that can kill, and no captions.
+    if (this.options.shortOpening) {
+      this.scrapLine(y, -11, 1, 5);
+      this.scrapLine(y + 6, 11, -1, 5);
+      return SHORT_OPENING_LENGTH;
     }
 
     // Lesson 1 — your colour comes to you. Player starts on blue.
