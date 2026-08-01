@@ -841,9 +841,13 @@ class Game {
         : completed.length
       ? `<b>Contract complete.</b><br>${completed.join("<br>")}`
       : goal
-      ? goal.remaining === 0
-        ? `<b>${goal.label}.</b> Spend it in the workshop.`
-        : `<b>${goal.remaining.toLocaleString()} more scrap</b> unlocks ${goal.label}.`
+      ? goal.kind === "level"
+        ? `<b>Next up: ${goal.label}.</b>`
+        : goal.kind === "contract"
+          ? `<b>Nearly there:</b> ${goal.label}.`
+          : goal.remaining === 0
+            ? `<b>${goal.label} is affordable now.</b> Spend it in the workshop.`
+            : `<b>${goal.remaining.toLocaleString()} more scrap</b> unlocks ${goal.label}.`
       : "<b>Everything is bought.</b> Nothing left but a better score.";
 
     el("compare").innerHTML = this.personalSummary();

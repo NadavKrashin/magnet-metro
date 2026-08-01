@@ -77,6 +77,17 @@ export interface UpgradeDef {
   blurb: string;
   maxLevel: number;
   baseCost: number;
+  /**
+   * Price of the very first pip, when it should not be `baseCost`.
+   *
+   * The first purchase is the moment the meta actually hooks: the player learns that a run
+   * makes them permanently stronger, and wants another one for that reason rather than for
+   * the score. A measured naive first run banks a little over a hundred scrap, so a 1,200
+   * opening price puts that moment five to ten runs away — most likely in a session that
+   * never happens. One cheap pip brings it inside the first sitting; the curve past it is
+   * untouched, so the long tail the shop is built around is unchanged.
+   */
+  introCost?: number;
   /** Human-readable effect of owning `level`. */
   describe(level: number): string;
   apply(mods: Modifiers, level: number): void;
@@ -89,6 +100,9 @@ export const UPGRADES: UpgradeDef[] = [
     blurb: "Widens the magnet.",
     maxLevel: 5,
     baseCost: 1200,
+    // The first thing anyone should own, and the most legible: a wider magnet is visible in
+    // the first second of the next run.
+    introCost: 400,
     describe: (l) => `Reach ${22 + l * 3}`,
     apply: (m, l) => {
       m.fieldRadiusBonus += l * 3;
@@ -142,6 +156,7 @@ export const UPGRADES: UpgradeDef[] = [
 
 /** Costs climb steeply so a maxed track is a genuine goal rather than an afternoon. */
 export function upgradeCost(def: UpgradeDef, currentLevel: number): number {
+  if (currentLevel === 0 && def.introCost !== undefined) return def.introCost;
   return Math.round(def.baseCost * Math.pow(2.3, currentLevel));
 }
 
@@ -264,11 +279,29 @@ export interface ContractDef {
   text: string;
   target: number;
   reward: number;
+  /**
+   * A one-off given to brand new players and never drawn again. The standing contracts are
+   * sized for somebody who already plays well; a beginner is thousands of scrap away from
+   * any of them, which leaves their first session with nothing to actually finish.
+   */
+  starter?: boolean;
   /** How much this run advanced the contract. */
   measure(r: RunSummary): number;
 }
 
 export const CONTRACTS: ContractDef[] = [
+  {
+    // Deliberately something a first-timer does by accident: the scripted lesson alone feeds
+    // them several mines in their own colour. Two ordinary runs finish it, and the payout
+    // plus those runs' own haul clears the opening Coil with change to spare — so the first
+    // upgrade lands inside the first sitting rather than in a session that may never happen.
+    id: "starter",
+    text: "Swallow 8 mines in your own colour",
+    target: 8,
+    reward: 600,
+    starter: true,
+    measure: (r) => r.absorbed,
+  },
   {
     id: "swallow",
     text: "Swallow mines in your own colour",
@@ -364,7 +397,9 @@ export function contractById(id: string): ContractDef | undefined {
 export function refillContracts(active: ActiveContract[]): ActiveContract[] {
   const out = active.filter((a) => contractById(a.id));
   const taken = new Set(out.map((a) => a.id));
-  const pool = CONTRACTS.filter((c) => !taken.has(c.id));
+  // The starter is handed out once, by emptySave, and never drawn again — a veteran being
+  // asked to swallow eight mines is not a contract, it is a formality.
+  const pool = CONTRACTS.filter((c) => !taken.has(c.id) && !c.starter);
   while (out.length < 3 && pool.length > 0) {
     const pick = pool.splice(Math.floor(Math.random() * pool.length), 1)[0]!;
     out.push({ id: pick.id, progress: 0 });
@@ -638,7 +673,9 @@ function emptySave(): SaveData {
     runs: 0,
     dailyDate: "",
     dailyBest: 0,
-    contracts: refillContracts([]),
+    // A new player opens with the starter in slot one, so there is something on the menu they
+    // can actually finish today.
+    contracts: refillContracts([{ id: "starter", progress: 0 }]),
     endlessBest: 0,
     endlessBestScore: 0,
     levelsDone: 0,
@@ -701,22 +738,39 @@ export function editionById(id: string): Edition {
  * are close to, named, with the gap in scrap. "Come back tomorrow" is not a reason; "1,400
  * more and the coil gets wider" is.
  */
-export function nextGoal(save: SaveData): { label: string; remaining: number } | null {
-  let best: { label: string; remaining: number } | null = null;
+export type GoalKind = "level" | "upgrade" | "contract";
 
-  // An unlocked, unbeaten level is the clearest possible next thing to do.
-  if (save.levelsDone < LEVELS.length) {
+export interface NextGoal {
+  kind: GoalKind;
+  label: string;
+  /** Scrap still needed. Zero means it is available right now. */
+  remaining: number;
+}
+
+export function nextGoal(save: SaveData): NextGoal | null {
+  let best: NextGoal | null = null;
+
+  // An unlocked, unbeaten level is the clearest possible next thing to do — but only for
+  // somebody who has seen the rule work. The menu holds the campaign back for exactly this
+  // reason, and pointing a first-timer at a numbered objective the menu is still hiding sends
+  // them somewhere they have no way to evaluate yet.
+  const warmedUp = save.runs >= 3 || save.levelsDone > 0;
+  if (warmedUp && save.levelsDone < LEVELS.length) {
     const next = LEVELS[save.levelsDone]!;
-    return { label: `Level ${next.n} — ${describeObjective(next).toLowerCase()}`, remaining: 0 };
+    return {
+      kind: "level",
+      label: `Level ${next.n} — ${describeObjective(next).toLowerCase()}`,
+      remaining: 0,
+    };
   }
 
   for (const def of UPGRADES) {
     const level = levelOf(save, def.id);
     if (level >= def.maxLevel) continue;
     const remaining = upgradeCost(def, level) - save.scrap;
-    if (remaining <= 0) return { label: `${def.name} ${level + 1} is affordable now`, remaining: 0 };
+    if (remaining <= 0) return { kind: "upgrade", label: `${def.name} ${level + 1}`, remaining: 0 };
     if (!best || remaining < best.remaining) {
-      best = { label: `${def.name} ${level + 1}`, remaining };
+      best = { kind: "upgrade", label: `${def.name} ${level + 1}`, remaining };
     }
   }
 
@@ -725,7 +779,7 @@ export function nextGoal(save: SaveData): { label: string; remaining: number } |
     if (!def) continue;
     const left = def.target - c.progress;
     if (left > 0 && left <= def.target * 0.34) {
-      return { label: `a contract: ${def.text.toLowerCase()}`, remaining: 0 };
+      return { kind: "contract", label: def.text.toLowerCase(), remaining: 0 };
     }
   }
 
