@@ -419,7 +419,12 @@ class Game {
       onAbsorb: () => this.audio.absorb(),
       onHit: () => this.audio.hit(),
       onFlip: (toRed) => this.audio.flip(toRed),
+      onRecord: () => this.audio.record(),
     };
+
+    // Only Free Run has a record to break, and only once there is one. The line is drawn
+    // across the track and celebrated on the way through.
+    this.world.recordLine = this.isEndless ? Math.floor(this.save.endlessBest) : 0;
 
     this.menuEl.classList.add("hidden");
     this.resultsEl.classList.add("hidden");

@@ -159,6 +159,17 @@ export class GameAudio {
     this.noise(0.35, 0.45, 900, 120);
   }
 
+  /**
+   * Crossing your own furthest distance. The emotional peak of the endless mode, so it gets
+   * an ascending fanfare rather than a blip — and it climbs where the loss sting falls.
+   */
+  record(): void {
+    [0, 7, 12, 19].forEach((s, i) => {
+      window.setTimeout(() => this.tone(semitone(ROOT_HZ * 4, s), 0.3, "triangle", 0.22), i * 70);
+    });
+    this.noise(0.5, 0.3, 600, 3200);
+  }
+
   flip(toRed: boolean): void {
     // Two clearly different pitches so the ear also tells you which colour you became.
     this.noise(0.14, 0.2, toRed ? 900 : 1700, toRed ? 1700 : 900);

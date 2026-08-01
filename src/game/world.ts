@@ -63,6 +63,8 @@ export interface WorldEvents {
   onAbsorb(): void;
   onHit(): void;
   onFlip(toRed: boolean): void;
+  /** The player just passed their own furthest distance. */
+  onRecord(): void;
 }
 
 export interface WorldOptions {
@@ -149,6 +151,18 @@ export class World {
   hitStop = 0;
 
   events: WorldEvents | null = null;
+
+  /**
+   * The player's previous furthest distance, drawn across the track as a printed rule and
+   * celebrated when crossed. Zero means there is nothing to beat yet.
+   *
+   * Passing your own record is the emotional peak of the endless mode, and it was previously
+   * a small label change. Making it a physical line the player watches approach for ten
+   * seconds — and then breaks through — is what turns it into the moment worth clipping.
+   */
+  recordLine = 0;
+  /** True once this run has crossed the line, so the set piece fires exactly once. */
+  recordBeaten = false;
 
   stats: RunStats = {
     collected: 0,
@@ -290,6 +304,10 @@ export class World {
     const prevY = p.y;
     p.x = clamp(p.x + p.vx * dt, -TRACK_HALF, TRACK_HALF);
     p.y += p.speed * dt;
+
+    if (!this.recordBeaten && this.recordLine > 0 && prevY < this.recordLine && p.y >= this.recordLine) {
+      this.breakRecord();
+    }
 
     const moved = dist(prevX, prevY, p.x, p.y);
     this.travelled += moved;
@@ -476,6 +494,22 @@ export class World {
     this.burst(h.x, h.y, 26, color);
     this.float(h.x, h.y, `+${gained}`, color);
     this.events?.onAbsorb();
+  }
+
+  /**
+   * Breaking through your own furthest distance. Deliberately given the same weight as
+   * swallowing a Press — the shove, the freeze and the ink slam — because it is the same kind
+   * of moment: the one the whole mode is played for.
+   */
+  private breakRecord(): void {
+    this.recordBeaten = true;
+    this.shake = Math.min(this.shake + 1.4, 2.6);
+    this.hitStop = Math.max(this.hitStop, 0.09);
+    this.absorbFlash = 1;
+    this.absorbFlashInk = ink.blue;
+    this.burst(this.player.x, this.player.y, 30, ink.blue);
+    this.float(this.player.x, this.player.y + 5, "NEW RECORD", ink.blue);
+    this.events?.onRecord();
   }
 
   /** Mismatching the press: it costs most of what you were carrying, but not a cell. */
