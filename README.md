@@ -25,11 +25,26 @@ Everything below serves that thesis. Anything that does not is a candidate for c
 
 ```bash
 npm install
-npm run dev          # local dev server, open the printed network URL on a phone
-npm run test         # headless simulation checks (determinism, termination)
+npm run dev          # dev server; open the printed network URL on a phone
+npm run test         # simulation, magnet, hazard-rule and level-reachability checks
 npm run balance      # difficulty and skill-expression report across 12 seeds
-npm run standalone   # single self-contained HTML file in dist/standalone.html
+npm run standalone   # one self-contained HTML file in dist/standalone.html (94 kB)
+npm run verify       # build, prove progress persists, screenshot, report frame time
+npm run capture      # gameplay video + store screenshots at every required size
+npm run icons        # regenerate app icon and splash from the game's own art
+npm run ios          # sync and open Xcode
+npm run android      # sync and open Android Studio
 ```
+
+### The other documents
+
+| File | What is in it |
+|---|---|
+| `PRODUCTION.md` | Everything still standing between this and a live, earning app |
+| `MONETISATION.md` | Ad placements, pacing, consent order, and how to go live |
+| `ANALYTICS.md` | What is measured and the five questions worth asking of it |
+| `MARKETING.md` | Store copy, ad concepts, where to post |
+| `BUILDING.md` | Device builds, signing, release |
 
 ## The control scheme
 
@@ -48,11 +63,18 @@ nobody preferred.
 |---|---|
 | **Levels** | Twelve fixed courses, one named objective each, unlocked in order, paying scrap and print editions |
 | **Today's Run** | One course per calendar day, identical for everyone |
-| **Free run** | A random course, no target |
+| **Free Run** | Endless. No finish line, difficulty climbs forever, and the only goal is to beat your own distance |
 
-A friend's course code is entered behind a fold on the menu rather than sitting in a field of
-its own. It is a power feature — it exists so a shared run can be replayed exactly — and as a
-permanent input it read like something the player was required to fill in.
+Sharing a run produces a **link**, not a code. Opening it drops the player straight into that
+exact course — deterministic generation means the same seed builds an identical course on
+every device, which is what turns a shared score into a challenge rather than a boast. Manual
+code entry survives in Settings as a fallback for anyone who was sent a code rather than a
+link. Set `SHARE_BASE_URL` in `src/analytics/config.ts` to wherever the web build is hosted.
+
+**Free Run never ends.** Difficulty keeps climbing past where a bounded course would have
+finished, Presses recur on a rhythm as milestones rather than as an ending, and the progress
+bar measures the run against the player's own record instead of a finish line. Speed is capped
+so a long run stays reactable rather than becoming a slideshow.
 
 Levels answer the question the endless run cannot: *what am I supposed to do next.* Objectives
 are single conditions on purpose — a compound goal is harder to show in a HUD than it is
@@ -116,28 +138,23 @@ hazards; the skilled bot targets scrap and dodges. The gap between them is skill
 
 | Mechanic | Naive clear | Skilled clear | Skilled hits | Skill lift |
 |---|---|---|---|---|
-| Switch | 50% | 100% | 0.3 | +1560% |
-| Overload | 17% | 100% | 0.4 | +1819% |
-| Tether *(parked)* | 33% | 25% | 2.8 | +54% |
+| **Switch** *(shipping)* | 75% | 100% | 0.2 | +1111% |
+| Overload *(parked)* | 50% | 100% | 0.1 | +266% |
+| Tether *(parked)* | 42% | 42% | 2.2 | +66% |
 
 Naive clear rate jumped from 8% to 50% for Switch when colour became a real rule, because a
 blindly tapping player now eats walls by accident about half the time. That is the mechanic
 being forgiving to a beginner and generous to an expert at the same time, which is the shape
 this genre needs.
 
-Overload's naive rate is the current outlier and is worth watching. Its blind bot holds and
-releases on a fixed cycle, which with a collapsed field collects almost nothing — a
-worst-case that flatters the mechanic far less than a real beginner would manage. It still
-wants a look once there is human data.
-
 Read these as directional, not final. The naive bot is worse than a real first-time player
 because it never avoids anything, so true first-run completion sits somewhere above these
 numbers. The comparison *between* mechanics is the useful part.
 
-The naive clear rate is the number to watch. The genre wants roughly 80% of players finishing
-their first run, and the bots are nowhere near that. Some of that gap is the bot being far
-worse than a person, but not all of it, and the honest next step is human play rather than
-another round of tuning against a robot.
+Naive clear rate is the number to watch: the genre wants roughly 80% of players finishing
+their first run, and Switch now sits at 75% with a bot that never avoids anything. Since a
+real beginner is better than that bot, the true figure is higher. The remaining honest step is
+human play, not another round of tuning against a robot.
 
 ## The Press
 
@@ -208,9 +225,15 @@ simulation is worthless if the screen says otherwise.
 ## Economy
 
 Score and currency are deliberately on different scales. A score climbing in thousands is
-exciting to watch; a currency climbing in thousands empties the shop in an afternoon. Only a
-sixth of a run's score is banked as spendable scrap, so a skilled run yields roughly 4,000
-against a full shop costing around 245,000.
+exciting to watch; a currency climbing in thousands empties the shop in an afternoon. A tenth
+of a run's score is banked as spendable scrap, against a full shop costing about 287,000 — so
+the first few upgrades land quickly and owning everything is on the order of a hundred runs.
+
+Endless runs bank on a **diminishing curve** past 25,000. Their length is unbounded while the
+shop's price is fixed, so a flat rate made distance a printing press: a maxed drone banked
+31,750 from one endless run, which is nine runs to own the entire shop. Score itself stays
+uncapped — that is the record being chased. `test/economy.test.ts` asserts the shape rather
+than the numbers, so tuning cannot quietly reintroduce the hole.
 
 ## The magnet was broken for four commits
 
@@ -315,25 +338,65 @@ without a canvas. That is what the headless tests and the balance harness rely o
 also the prerequisite for shareable challenge codes and ghost races later.
 
 ```
-src/core/       loop, input, seeded RNG, math    (no DOM, no rendering)
-src/game/       world simulation and course generation
-src/mechanics/  the three candidate control schemes
-src/render/     canvas renderer
-test/           headless simulation checks and the balance harness
+src/core/        loop, input, seeded RNG, math      (no DOM, no rendering)
+src/game/        world simulation, course generation, progression, storage, autopilot
+src/mechanics/   the control scheme, plus two parked candidates
+src/render/      canvas renderer, print palette, paper texture
+src/audio/       synthesised music and effects
+src/ads/         AdMob, consent, ATT, pacing
+src/analytics/   event taxonomy and sinks
+test/            simulation, magnet, hazard, level-reachability, balance harness
+scripts/         single-file build, screenshots, marketing capture, icons
 ```
+
+Zero runtime dependencies for the game itself: no engine, no framework, no sprite atlas. The
+only shipped packages are the Capacitor plugins, and they do nothing on the web build.
 
 Course generation is fully deterministic from a seed, so the same code always builds the same
 course on every device.
 
-## Status and what is not here yet
+## Advertising
 
-Built: core loop, three mechanics, course generation, scoring, chain physics, effects, the
-comparison harness, single-file build.
+Three placements, none of them during play. Detail and the go-live steps are in
+`MONETISATION.md`.
 
-Not built: the city restoration metagame, ad SDK integration, in-app purchases, the Capacitor
-native wrap, cloud save, analytics, consent handling, and store assets. Those follow once a
-mechanic is chosen — building them against three candidate cores would be three times the work
-for the same result.
+| Placement | Format | When |
+|---|---|---|
+| **Continue** | Rewarded, opt-in | After the drone is destroyed, past 35% of the course, once per run |
+| **Double it** | Rewarded, opt-in | On the results sheet, after the scrap is already banked |
+| Post-results | Interstitial | Only once the results sheet is on screen, and only if pacing allows |
+
+Both rewarded placements are offered **after the outcome is already known**, so they add to a
+result rather than withholding one, and the reward is granted on the SDK's completion event
+rather than on dismissal. Interstitials are gated hard: never before a player's fourth
+lifetime run, never within 180s of launch, 120s apart, five a session.
+
+Everything currently runs against Google's test inventory, which always fills and earns
+nothing. Consent, App Tracking Transparency and SDK start-up happen in the order the platforms
+require — getting that wrong is a store rejection rather than a bug.
+
+## Measurement
+
+Every event fires already; only a destination is missing, and it is one line in
+`src/analytics/config.ts`. `ANALYTICS.md` covers the five questions worth asking.
+
+The two that matter most: `run_end` carries `progressBand`, so a histogram of where runs
+actually stop *is* the difficulty curve — and `level_attempt` carries the attempt number, so
+the level where attempts climb and clears do not follow is the level people quit on.
+
+Players are joined by an anonymous device-generated install id that identifies nothing about
+the person and dies on uninstall.
+
+## What is left
+
+`PRODUCTION.md` has the full ordered list. The short version: accounts and a privacy policy
+URL, real AdMob unit IDs, an analytics destination, a signing key, and real-device testing.
+Everything that can be built without your credentials is built.
+
+Known gaps, stated plainly: there is no cloud save, so reinstalling starts from zero; there is
+one interstitial placement, so ad revenue leans on the two rewarded spots; and frame time has
+only ever been measured under software rendering with no GPU, so a real phone is still an open
+question.
 
 ## A note on the business case
 

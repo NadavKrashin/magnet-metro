@@ -1,132 +1,161 @@
-# Getting to production
+# What you need to do
 
-Everything still standing between the current build and a live, earning app. Ordered so that
-nothing blocks on something further down.
+Everything still standing between this repository and a live, earning app.
 
-Items marked **you** cannot be done from this repository — they need your money, your legal
-identity, or your Apple/Google accounts.
+Ordered so nothing blocks on something further down. Every item here needs your money, your
+legal identity, your store accounts, or a real phone — which is why it is on your list rather
+than already done.
 
 ---
 
-## Stage 1 — Accounts and money (you)
+## The single highest-leverage hour: put up a web page
 
-Nothing else can start until these exist. Total: **$124 up front, $99/year after.**
+Do this before anything else. One free static page — GitHub Pages is enough — unlocks **four**
+separately blocked things at once:
 
-- [ ] **Apple Developer Program** — $99/year. Enrolment can take 24–48 hours, sometimes longer
-      for individuals who need identity verification. Start this first because it is the only
-      item with an unpredictable wait.
-- [ ] **Google Play Console** — $25, one time.
-- [ ] **AdMob account**, linked to the same Google account. Register two apps inside it,
-      Android and iOS.
-- [ ] **Decide the bundle identifier.** Currently `com.magnetmetro.game` in
-      `capacitor.config.ts`. It must be globally unique and **can never be changed after first
-      release** on either store. If you own a domain, use a reversed form of it.
-- [ ] **A domain or a hosted page** for the privacy policy and `app-ads.txt`. A free GitHub
-      Pages site is sufficient.
+- [ ] Host `dist/standalone.html` (94 kB, one file, no build step on the host)
+- [ ] Publish your **privacy policy** there
+- [ ] Publish **`app-ads.txt`** there
+- [ ] Set `SHARE_BASE_URL` in `src/analytics/config.ts` so shared runs become tappable links
 
-## Stage 2 — Legal and privacy (you, with help)
+Without it: submissions get rejected, a large share of ad demand will not bid, sharing falls
+back to codes people have to type, and you have nowhere to send the communities in
+`MARKETING.md` — who convert far better on a link they can play in three seconds than on an
+install request.
 
-These are hard gates. Submission is rejected without them, and AdMob will not serve.
+---
 
-- [ ] **Write and publish a privacy policy** at a public URL. It must name the AdMob SDK, the
-      data it collects, and how to opt out. Generators exist and are acceptable for an app of
-      this size, but read what you publish.
-- [ ] Paste that URL into `PRIVACY_POLICY_URL` in `src/ads/config.ts`. The in-app link stays
-      hidden while it is empty, and the console warns on every launch.
-- [ ] Enter the same URL in App Store Connect and in the Play Console.
-- [ ] **Publish `app-ads.txt`** on that domain, and declare the domain in both consoles.
-      Without it a large share of programmatic demand simply will not bid on your inventory.
-- [ ] **Play Data Safety form** and **Apple privacy nutrition labels**. Both must describe what
+## Stage 1 — Accounts
+
+**$124 up front, $99/year after.**
+
+- [ ] **Apple Developer Program**, $99/year. Start this first: enrolment can take 24–48 hours
+      and longer if they verify your identity. It is the only item with an unpredictable wait.
+- [ ] **Google Play Console**, $25 once.
+- [ ] **AdMob account** on the same Google account, with two apps registered inside it.
+- [ ] **Firebase project**, if you want retention cohorts computed for you. Free.
+- [ ] **Lock the bundle identifier.** Currently `com.magnetmetro.game` in
+      `capacitor.config.ts`. It must be globally unique and **can never change after first
+      release** on either store.
+
+## Stage 2 — Legal
+
+Hard gates. Submission is rejected without these, and AdMob will not serve.
+
+- [ ] **Write and publish the privacy policy.** It must name the AdMob SDK, what it collects,
+      and how to opt out. It must also mention the anonymous install id the analytics uses.
+      Generators are acceptable at this size, but read what you publish.
+- [ ] Paste the URL into `PRIVACY_POLICY_URL` in `src/ads/config.ts`. The in-app link stays
+      hidden until you do, and the console warns on every launch.
+- [ ] Enter the same URL in App Store Connect and the Play Console.
+- [ ] **Play Data Safety** form and **Apple privacy nutrition labels**. Both must describe what
       the *AdMob SDK* collects — device identifiers, coarse location, usage data — not only
-      what your own code collects. Google publishes a disclosure guide for AdMob; use it.
-- [ ] **Content rating questionnaires** in both consoles.
-- [ ] Reword `NSUserTrackingUsageDescription` in `ios/App/App/Info.plist` in your own voice.
+      your own code. Google publishes an AdMob disclosure guide; follow it.
+- [ ] **Content rating** questionnaires in both consoles.
+- [ ] Rewrite `NSUserTrackingUsageDescription` in `ios/App/App/Info.plist` in your own words.
       Apple rejects vague or boilerplate tracking strings.
 
-## Stage 3 — Switch the ads on
+## Stage 3 — Turn the ads on
 
-Currently every placement runs against Google's test inventory, which always fills and earns
-nothing. Details in `MONETISATION.md`.
+Every placement currently runs on Google's test inventory: always fills, earns nothing. Detail
+in `MONETISATION.md`.
 
-- [ ] Create **four ad units** in AdMob: rewarded and interstitial, for each platform.
-- [ ] Paste them into `REAL` in `src/ads/config.ts` and set `LIVE = true`.
-- [ ] Replace the **two app IDs**, which currently hold Google's test values:
+- [ ] Create **four ad units**: rewarded and interstitial, for each platform.
+- [ ] Paste them into `REAL` in `src/ads/config.ts`, then set `LIVE = true`.
+- [ ] Replace the **two app IDs**, which hold Google's test values today:
       - `android/app/src/main/AndroidManifest.xml` → `com.google.android.gms.ads.APPLICATION_ID`
       - `ios/App/App/Info.plist` → `GADApplicationIdentifier`
-      - Android **crashes on launch** if this is missing or malformed.
+      - **Android crashes on launch** if this is wrong or missing.
 - [ ] Add the full **SKAdNetwork identifier list** to `Info.plist`. Only Google's primary ID is
-      there now, and iOS attribution under-reports without the rest.
+      there, and iOS attribution under-reports without the rest.
 
-## Stage 4 — Analytics you can actually read
+## Stage 4 — Turn the measurement on
 
-Events, sinks and the install id all exist. Only the destination is missing. Full detail and
-the five questions worth asking are in `ANALYTICS.md`.
+One line. Everything else exists. See `ANALYTICS.md`.
 
-- [ ] Either `npm install @capacitor-firebase/analytics firebase`, add the two Firebase config
-      files to the native projects and set `USE_FIREBASE = true` — **or** set
-      `ANALYTICS_ENDPOINT` to a URL you control. Both live in `src/analytics/config.ts`.
-- [ ] Declare the anonymous install id in your privacy policy and Data Safety form.
-- [ ] Confirm **D1 retention** is visible in whatever you choose. It is the gate for everything
-      in `MARKETING.md`.
+- [ ] Either `npm install @capacitor-firebase/analytics firebase`, drop
+      `google-services.json` and `GoogleService-Info.plist` into the native projects, and set
+      `USE_FIREBASE = true` — **or** set `ANALYTICS_ENDPOINT` to a URL you control. Both live
+      in `src/analytics/config.ts`. You can run both.
+- [ ] Confirm **D1 retention** is actually visible in whatever you pick. It is the gate for
+      every decision in `MARKETING.md`.
 
-## Stage 5 — Build, sign, test on real devices
+## Stage 5 — Build, sign, and test on real phones
 
 - [ ] `npm run sync`, then `npm run ios` / `npm run android`.
-- [ ] **Generate an Android upload keystore** and store it in a password manager, outside this
-      repository. Play accepts uploads signed with that key and no other; losing it means
-      losing the ability to update the app. Command is in `BUILDING.md`.
-- [ ] Set the **iOS signing team** in Xcode and give the bundle ID a unique suffix if
-      `com.magnetmetro.game` is taken.
-- [ ] **Test on at least one real low-end Android phone.** Frame time is the open question:
-      the print look is composite-heavy and everything measured so far has been software
-      rendering in a container, which is not representative in either direction.
-- [ ] **Verify on device**: the consent form appears in a GDPR region, the ATT prompt appears
-      on iOS, a rewarded ad plays and pays out, an interstitial appears only after the results
-      sheet, and the game is fully playable if you decline everything.
+- [ ] **Generate the Android upload keystore** and put it in a password manager, outside this
+      repository. Play accepts that key and no other; losing it means never updating the app
+      again. Command is in `BUILDING.md`.
+- [ ] Set the **iOS signing team** in Xcode.
+- [ ] **Test on a real low-end Android phone.** Frame time is the one genuinely open technical
+      question — everything measured so far has been software rendering with no GPU, which is
+      not representative in either direction.
+- [ ] **Verify on device**: the consent form appears in a GDPR region; the ATT prompt appears
+      on iOS; a rewarded ad plays and actually pays out; an interstitial appears only after the
+      results sheet; and the game is fully playable if you decline everything.
 - [ ] Check progress survives **force-quit, reinstall-over, and an OS update**.
+- [ ] Open a challenge link on a phone and confirm it lands in the right course.
 
 ## Stage 6 — Store listings
 
 Copy, keywords and screenshot captions are written and ready to paste in `MARKETING.md`.
 
-- [ ] Run `npm run capture` for screenshots at every required size, and `npm run icons` if you
+- [ ] `npm run capture` for screenshots at every required size. `npm run icons` only if you
       change the artwork.
-- [ ] Upload listing copy, screenshots, and a preview video to both stores.
-- [ ] Set up **TestFlight** and a **Play internal testing track**. Get the build onto ten real
-      phones belonging to other people before you go public.
+- [ ] Convert the captured `.webm` to `.mp4` — one `ffmpeg` line, in `MARKETING.md` — and add
+      music in an editor. The game's audio is synthesised live and is not captured.
+- [ ] Upload copy, screenshots and a preview video to both stores.
+- [ ] **TestFlight** and a **Play internal testing track**. Get it onto ten phones belonging to
+      other people before going public.
 - [ ] Submit. Expect Apple review in 24–48 hours and a rejection or two; Play is usually
-      faster but the first review of a new developer account can take days.
+      faster, but a new developer account's first review can take days.
 
 ## Stage 7 — Launch and measure
 
-- [ ] Post the **web build** to communities before the store links exist. It is a 88 kB page
-      that plays in three seconds, and it converts far better than an install request.
+- [ ] Post the **web build** to the communities in `MARKETING.md` before store links exist.
 - [ ] Start posting vertical clips. Three to five a week, varying only the first two seconds.
 - [ ] Watch **D1 retention**. Below roughly 25%, stop promoting and fix the game — promotion
-      multiplies whatever is already there.
+      multiplies whatever is already there, including nothing.
 - [ ] Only once organic is running, spend **$200–300** on a paid test to learn your real CPI.
 
 ---
 
-## Known gaps I would fix before a wide launch
+## Every switch you have to flip, in one place
 
-Not blockers for a soft launch, but each is a real rough edge:
+| Setting | File | Currently |
+|---|---|---|
+| `PRIVACY_POLICY_URL` | `src/ads/config.ts` | empty — link hidden, console warns |
+| `LIVE` | `src/ads/config.ts` | `false` — test ads, earning nothing |
+| `REAL` ad unit IDs | `src/ads/config.ts` | empty |
+| AdMob app ID (Android) | `android/.../AndroidManifest.xml` | Google's test ID |
+| AdMob app ID (iOS) | `ios/App/App/Info.plist` | Google's test ID |
+| `SHARE_BASE_URL` | `src/analytics/config.ts` | empty — sharing falls back to codes |
+| `USE_FIREBASE` | `src/analytics/config.ts` | `false` |
+| `ANALYTICS_ENDPOINT` | `src/analytics/config.ts` | empty |
+| Bundle identifier | `capacitor.config.ts` | `com.magnetmetro.game` |
 
-- **No cloud save.** Progress is durable on-device (native Preferences) but reinstalling or
-  changing phone starts from zero. Fine for now; it stops being fine the moment you sell a
-  "remove ads" purchase, because losing that is a refund request.
-- **Only one interstitial placement.** Deliberate — but it means ad revenue rests almost
-  entirely on the two rewarded spots until there is retention data to justify more.
-- **Frame time is unverified on real hardware.** 34–44 ms measured under software rendering
-  with no GPU. A real phone should be far better, but "should" is not "is".
+## Known gaps
+
+Not blockers for a soft launch, but real, and better known than discovered:
+
+- **No cloud save.** Progress is durable on-device via native Preferences, but reinstalling or
+  changing phone starts from zero. Acceptable now; it stops being acceptable the moment you
+  sell a "remove ads" purchase, because losing that is a refund request.
+- **One interstitial placement.** Deliberate, but it means ad revenue leans almost entirely on
+  the two rewarded spots until retention data justifies more.
+- **Frame time unverified on real hardware.** 31–44 ms under software rendering with no GPU. A
+  real phone should be far better, but "should" is not "is".
+- **No leaderboard.** Scores are comparable through shared course links and Free Run tracks a
+  personal record, but nothing ranks players against each other. Worth considering only once
+  retention justifies a backend.
 
 ## What is already done
 
-For completeness, so nothing on the list above gets duplicated:
-
-Game, art, audio, twelve levels, daily course, contracts, workshop with upgrades and print
-editions, durable native storage with migration, rewarded and interstitial placements with
+So nothing above gets duplicated: the game, art, audio, twelve levels, a daily course,
+contracts, the workshop with upgrades and print editions, pause and settings, durable native
+storage with migration from older builds, rewarded and interstitial placements with
 policy-conservative pacing, GDPR consent and ATT in the required order, a privacy-choices entry
-point, the analytics taxonomy and call sites, share with course code, app icon and splash at
-all 104 platform sizes, native iOS and Android projects, and a test suite covering
-determinism, the magnet, the colour rules, level reachability and save persistence.
+point, the full analytics taxonomy with two ready sinks, shareable challenge links, app icon
+and splash at all 104 platform sizes, native iOS and Android projects, marketing capture
+tooling, and a test suite covering determinism, the magnet, the colour rules, level
+reachability and save persistence.

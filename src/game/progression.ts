@@ -19,13 +19,33 @@ const SAVE_KEY = "mm_save_v2";
  *
  * Score and currency want different scales. A score climbing in thousands is exciting to
  * watch; a currency climbing in thousands empties the shop in an afternoon. Decoupling them
- * keeps the number on screen big while making an upgrade something you work toward — a
- * skilled run banks roughly 4,000, and the full shop costs around 245,000.
+ * keeps the number on screen big while making an upgrade something you work toward.
+ *
+ * A good run banks roughly 2,400 against a full shop costing about 280,000, so owning
+ * everything is on the order of a hundred runs rather than a single evening. The first two or
+ * three upgrades still land quickly, which is what matters for a new player — it is the tail
+ * that is meant to be long.
  */
-export const SCRAP_RATE = 1 / 6;
+export const SCRAP_RATE = 1 / 10;
 
-export function scrapFromScore(score: number): number {
-  return Math.round(score * SCRAP_RATE);
+/**
+ * Score above which an endless run's *bankable* haul starts to flatten out.
+ *
+ * Score itself stays uncapped — it is the record being chased, and capping it would gut the
+ * whole point of the mode. But an endless run's length is unbounded while the shop's cost is
+ * fixed, so paying a flat rate on it makes the endless mode strictly the best way to farm and
+ * quietly undoes every other economy decision. Measured: a maxed drone banked 31,750 from one
+ * endless run against a 287,000 shop — nine runs to own everything.
+ */
+const ENDLESS_SOFT_CAP = 25000;
+const ENDLESS_TAPER = 50;
+
+export function scrapFromScore(score: number, endless = false): number {
+  if (!endless || score <= ENDLESS_SOFT_CAP) return Math.round(score * SCRAP_RATE);
+  // Square-root growth past the cap: a run four times as long pays roughly twice as much,
+  // which still rewards going further without making distance a printing press.
+  const effective = ENDLESS_SOFT_CAP + Math.sqrt(score - ENDLESS_SOFT_CAP) * ENDLESS_TAPER;
+  return Math.round(effective * SCRAP_RATE);
 }
 
 export interface Modifiers {
@@ -122,7 +142,7 @@ export const UPGRADES: UpgradeDef[] = [
 
 /** Costs climb steeply so a maxed track is a genuine goal rather than an afternoon. */
 export function upgradeCost(def: UpgradeDef, currentLevel: number): number {
-  return Math.round(def.baseCost * Math.pow(2.15, currentLevel));
+  return Math.round(def.baseCost * Math.pow(2.3, currentLevel));
 }
 
 /**
@@ -238,7 +258,7 @@ export const CONTRACTS: ContractDef[] = [
   {
     id: "haul",
     text: "Bank scrap",
-    target: 12000,
+    target: 8000,
     reward: 4000,
     measure: (r) => r.score,
   },
@@ -317,6 +337,10 @@ export interface LevelDef {
 }
 
 /**
+ * A flawless run sits at level 10, not level 5: once the courses were tightened it stopped
+ * being something a stock drone could manage, and an early level that demands upgrades the
+ * player has not had time to buy is a wall rather than a lesson.
+ *
  * Targets are bracketed by test/levels.test.ts, which plays every course with the autopilot on
  * both a stock and a fully upgraded drone. The first five must be clearable with no upgrades
  * at all; later ones are allowed to require them, because that is what makes the shop matter.
@@ -324,17 +348,17 @@ export interface LevelDef {
  */
 export const LEVELS: LevelDef[] = [
   { n: 1, seed: "LVL-0001", kind: "finish", target: 1, reward: 400 },
-  { n: 2, seed: "LVL-0002", kind: "score", target: 3000, reward: 600 },
+  { n: 2, seed: "LVL-0002", kind: "score", target: 6000, reward: 600 },
   { n: 3, seed: "LVL-0003", kind: "absorb", target: 8, reward: 800 },
-  { n: 4, seed: "LVL-0004", kind: "score", target: 8000, reward: 1000 },
-  { n: 5, seed: "LVL-0005", kind: "flawless", target: 1, reward: 1600 },
+  { n: 4, seed: "LVL-0004", kind: "score", target: 12000, reward: 1000 },
+  { n: 5, seed: "LVL-0005", kind: "absorb", target: 14, reward: 1600 },
   { n: 6, seed: "LVL-0006", kind: "absorb", target: 20, reward: 1400, unlockEdition: "riot" },
-  { n: 7, seed: "LVL-0007", kind: "score", target: 15000, reward: 1800 },
-  { n: 8, seed: "LVL-0008", kind: "combo", target: 120, reward: 2000 },
-  { n: 9, seed: "LVL-0009", kind: "score", target: 22000, reward: 2400 },
-  { n: 10, seed: "LVL-0010", kind: "absorb", target: 24, reward: 2800, unlockEdition: "nightshift" },
-  { n: 11, seed: "LVL-0011", kind: "combo", target: 160, reward: 3200 },
-  { n: 12, seed: "LVL-0012", kind: "score", target: 34000, reward: 6000, unlockEdition: "blueprint" },
+  { n: 7, seed: "LVL-0007", kind: "score", target: 20000, reward: 1800 },
+  { n: 8, seed: "LVL-0008", kind: "combo", target: 150, reward: 2000 },
+  { n: 9, seed: "LVL-0009", kind: "score", target: 30000, reward: 2400 },
+  { n: 10, seed: "LVL-0010", kind: "flawless", target: 1, reward: 2800, unlockEdition: "nightshift" },
+  { n: 11, seed: "LVL-0011", kind: "combo", target: 210, reward: 3200 },
+  { n: 12, seed: "LVL-0012", kind: "score", target: 45000, reward: 6000, unlockEdition: "blueprint" },
 ];
 
 export function describeObjective(level: LevelDef): string {
@@ -399,6 +423,10 @@ export interface SaveData {
   dailyDate: string;
   dailyBest: number;
   contracts: ActiveContract[];
+  /** Furthest distance reached in an endless run, in world units. The record to beat. */
+  endlessBest: number;
+  /** Best endless score, shown alongside the distance. */
+  endlessBestScore: number;
   /** How many campaign levels have been completed. Levels unlock in order. */
   levelsDone: number;
   /**
@@ -419,6 +447,8 @@ function emptySave(): SaveData {
     dailyDate: "",
     dailyBest: 0,
     contracts: refillContracts([]),
+    endlessBest: 0,
+    endlessBestScore: 0,
     levelsDone: 0,
     levelAttempts: {},
   };
@@ -441,6 +471,8 @@ export function loadSave(): SaveData {
       dailyDate: parsed.dailyDate ?? "",
       dailyBest: Number(parsed.dailyBest) || 0,
       contracts: refillContracts(parsed.contracts ?? []),
+      endlessBest: Number(parsed.endlessBest) || 0,
+      endlessBestScore: Number(parsed.endlessBestScore) || 0,
       levelsDone: Number(parsed.levelsDone) || 0,
       levelAttempts: parsed.levelAttempts ?? {},
     };

@@ -91,6 +91,8 @@ class Game {
   private revivedThisRun = false;
   /** Score of the run whose results are on screen, for the bonus and the share text. */
   private lastRunScore = 0;
+  /** Whether the run on the results sheet was endless, for the rewarded bonus maths. */
+  private lastRunEndless = false;
   /**
    * Demo mode: the game plays itself and the interface gets out of the way. Enabled with
    * ?demo=1, and used to film gameplay for store listings and ad creative without needing a
@@ -117,6 +119,8 @@ class Game {
   private isDaily = false;
   /** Index into LEVELS when playing the campaign, or -1 for a free run. */
   private levelIndex = -1;
+  /** True when the current run has no finish line. */
+  private isEndless = false;
   private seedCode = randomCode(new Rng(Date.now() >>> 0));
 
   private hud = el("hud");
@@ -164,12 +168,14 @@ class Game {
       // genuinely free rather than silently still being scored against level 7.
       this.levelIndex = -1;
       this.isDaily = false;
+      this.isEndless = false;
       this.showMenu();
     });
     el("btn-daily").addEventListener("click", () => {
       this.seedCode = dailyCode();
         this.isDaily = true;
       this.levelIndex = -1;
+      this.isEndless = false;
       this.startRun();
     });
     el("btn-pause").addEventListener("click", () => this.pause("button"));
@@ -216,6 +222,7 @@ class Game {
       this.seedCode = randomCode(new Rng(Date.now() >>> 0));
       this.isDaily = false;
       this.levelIndex = -1;
+      this.isEndless = true;
       this.startRun();
     });
 
@@ -234,6 +241,7 @@ class Game {
       this.seedCode = v;
       this.isDaily = false;
       this.levelIndex = -1;
+      this.isEndless = false;
       this.startRun();
     });
 
@@ -372,7 +380,7 @@ class Game {
   private startRun(): void {
     this.world = new World(
       seedFromCode(this.seedCode),
-      this.active.worldOptions,
+      { ...this.active.worldOptions, endless: this.isEndless },
       modifiersFor(this.save),
     );
     this.buildIntegrity();
@@ -458,7 +466,8 @@ class Game {
   private async watchToDouble(): Promise<void> {
     const earned = await this.ads.showRewarded("double_scrap");
     if (!earned) return;
-    const bonus = scrapFromScore(this.lastRunScore) * (REWARD.doubleScrapMultiplier - 1);
+    const bonus =
+      scrapFromScore(this.lastRunScore, this.lastRunEndless) * (REWARD.doubleScrapMultiplier - 1);
     this.save.scrap += bonus;
     saveSave(this.save);
     this.analytics.track("currency_earned", { amount: bonus, source: "rewarded_double" });
@@ -566,6 +575,7 @@ class Game {
       btn.addEventListener("click", () => {
         this.levelIndex = i;
         this.isDaily = false;
+        this.isEndless = false;
         this.seedCode = lv.seed;
         this.seedInput.value = lv.seed;
         this.levelsEl.classList.add("hidden");
@@ -584,6 +594,11 @@ class Game {
     el("bank-value").textContent = this.save.scrap.toLocaleString();
 
     const total = LEVELS.length;
+    el("free-note").textContent =
+      this.save.endlessBest > 0
+        ? `Furthest: ${Math.floor(this.save.endlessBest).toLocaleString()} m`
+        : "No finish line. Beat your own distance.";
+
     el("levels-note").textContent =
       this.save.levelsDone >= total
         ? "All twelve cleared"
@@ -605,6 +620,7 @@ class Game {
     this.state = "results";
     const w = this.world;
     this.lastRunScore = w.score;
+    this.lastRunEndless = this.isEndless;
     this.reviveEl.classList.add("hidden");
     this.audio.stopMusic();
     this.audio.finish(w.phase === "won");
@@ -625,10 +641,18 @@ class Game {
 
     // Everything scored in a run is banked. A run that only produces a number is over the
     // moment it ends; a run that moves you closer to a wider coil is a reason to start another.
-    const banked = scrapFromScore(record.score);
+    const banked = scrapFromScore(record.score, this.isEndless);
     this.save.scrap += banked;
     this.save.lifetimeScrap += banked;
     this.save.runs += 1;
+
+    if (this.isEndless) {
+      const reached = Math.floor(w.player.y);
+      if (reached > this.save.endlessBest) {
+        this.save.endlessBest = reached;
+        this.save.endlessBestScore = record.score;
+      }
+    }
 
     const today = dailyCode();
     if (this.isDaily) {
@@ -679,15 +703,21 @@ class Game {
     const prior = this.runs.filter((r) => r !== record);
     const priorBest = prior.length ? Math.max(...prior.map((r) => r.score)) : 0;
 
+    const endlessDistance = Math.floor(w.player.y);
+    const endlessRecord = this.isEndless && endlessDistance >= this.save.endlessBest;
     el("result-title").textContent = level
       ? levelCleared
         ? `Level ${level.n} complete`
         : `Level ${level.n} — ${describeObjective(level).toLowerCase()}`
-      : record.won
-        ? this.isDaily
-          ? "Today's run — cleared"
-          : "Course cleared"
-        : "Drone destroyed";
+      : this.isEndless
+        ? endlessRecord
+          ? `New record — ${endlessDistance.toLocaleString()} m`
+          : `${endlessDistance.toLocaleString()} m`
+        : record.won
+          ? this.isDaily
+            ? "Today's run — cleared"
+            : "Course cleared"
+          : "Drone destroyed";
     el("result-score").textContent = String(record.score);
     el("result-best").textContent =
       record.score > priorBest && prior.length > 0
@@ -705,9 +735,15 @@ class Game {
       ["Hits taken", String(record.hits)],
       ["Thumb actions", String(record.actions)],
       ["Time", `${record.duration.toFixed(1)}s`],
+      ...(this.isEndless
+        ? ([["Distance", `${endlessDistance.toLocaleString()} m`],
+            ["Furthest ever", `${Math.floor(this.save.endlessBest).toLocaleString()} m`]] as [string, string][])
+        : []),
       ["Mines swallowed", String(w.stats.absorbed)],
       ["Scrap banked", `+${banked.toLocaleString()}`],
-      ["Course reached", `${Math.round((Math.min(this.world.player.y, COURSE_LENGTH) / COURSE_LENGTH) * 100)}%`],
+      ...(this.isEndless
+        ? []
+        : ([["Course reached", `${Math.round((Math.min(this.world.player.y, COURSE_LENGTH) / COURSE_LENGTH) * 100)}%`]] as [string, string][])),
     ];
     el("result-stats").innerHTML = rows
       .map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`)
@@ -716,7 +752,11 @@ class Game {
     // The concrete next thing, named, with the gap. "Come back tomorrow" is not a reason to
     // return; "1,400 more and the coil gets wider" is.
     const goal = nextGoal(this.save);
-    el("result-goal").innerHTML = levelCleared
+    el("result-goal").innerHTML = this.isEndless
+      ? endlessRecord
+        ? "<b>Furthest you have ever been.</b> It only gets faster from here."
+        : `<b>${(this.save.endlessBest - endlessDistance).toLocaleString()} m short</b> of your record.`
+      : levelCleared
       ? `<b>+${level!.reward.toLocaleString()} scrap.</b>${level!.unlockEdition ? ` The ${level!.unlockEdition} edition is yours — equip it in the workshop.` : " Next level unlocked."}`
       : level
         ? `<b>Not this time.</b> ${describeObjective(level)}. Run it again.`
@@ -946,7 +986,16 @@ class Game {
     const mult = w.multiplier;
     this.multEl.textContent = `x${mult}`;
     this.multEl.classList.toggle("on", mult > 1);
-    this.progressEl.style.width = `${w.progress * 100}%`;
+    if (this.isEndless) {
+      // The bar measures the run against the player's own record rather than a finish line.
+      const best = Math.max(this.save.endlessBest, 400);
+      const frac = Math.min(1, w.player.y / best);
+      this.progressEl.style.width = `${frac * 100}%`;
+      this.progressEl.classList.toggle("record", w.player.y > this.save.endlessBest);
+    } else {
+      this.progressEl.style.width = `${w.progress * 100}%`;
+      this.progressEl.classList.remove("record");
+    }
 
     // The prompt is authored by the mechanic against course position, so it always describes
     // whatever is on screen right now rather than running off a fixed timer.
@@ -958,8 +1007,16 @@ class Game {
     this.audio.setIntensity(0.35 * w.progress + 0.65 * Math.min(1, w.combo / 40));
 
     const level = this.levelIndex >= 0 ? LEVELS[this.levelIndex] : undefined;
-    this.objectiveEl.classList.toggle("hidden", !level);
-    if (level) {
+    this.objectiveEl.classList.toggle("hidden", !level && !this.isEndless);
+    if (this.isEndless) {
+      const m = Math.floor(w.player.y);
+      const beat = w.player.y > this.save.endlessBest;
+      el("objective-text").textContent = beat ? "NEW RECORD" : "BEST";
+      el("objective-progress").textContent = beat
+        ? `${m.toLocaleString()} m`
+        : `${m.toLocaleString()} / ${Math.floor(this.save.endlessBest).toLocaleString()} m`;
+      this.objectiveEl.classList.toggle("done", beat);
+    } else if (level) {
       const prog = objectiveProgress(level, {
         score: w.score,
         absorbed: w.stats.absorbed,

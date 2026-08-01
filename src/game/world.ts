@@ -39,6 +39,8 @@ const MAX_SCRAP_SPEED = 115;
 const HAZARD_PULL_FACTOR = 0.22;
 /** How much of the course tail-end is given over to the closing set piece. */
 export const PRESS_ZONE = 150;
+/** Distance between Presses in an endless run. */
+const PRESS_INTERVAL = 1150;
 /** Course distance given over to the scripted teaching sequence. */
 export const OPENING_LENGTH = 290;
 /** Absorbing a matching hazard is worth this much before the combo multiplier. */
@@ -62,6 +64,12 @@ export interface WorldEvents {
 }
 
 export interface WorldOptions {
+  /**
+   * No finish line. Difficulty keeps climbing and the only goal is to beat your own distance,
+   * so the run ends when the player does. Presses recur as milestones instead of being the
+   * ending, which keeps the best moment in the game without needing a course to stop.
+   */
+  endless?: boolean;
   /** Spawn tether anchors. Only the tether mechanic uses them. */
   anchors: boolean;
   /** Give scrap and hazards a red/blue charge. Mechanics that ignore polarity spawn neutral. */
@@ -131,6 +139,8 @@ export class World {
   /** Colour of the closing set piece, decided once so the whole wall matches. */
   pressPolarity: Polarity = 0;
   private inPress = false;
+  /** Course distance at which the next endless Press is due. */
+  private nextPressAt = COURSE_LENGTH * 0.72;
   private viewHeight = 142;
 
   /** Permanent upgrades bought in the shop. Defaults to an unmodified drone. */
@@ -175,6 +185,20 @@ export class World {
     return clamp(this.player.y / COURSE_LENGTH, 0, 1);
   }
 
+  /**
+   * How hard the course should be right now, 0 to 1.
+   *
+   * A bounded course spreads its difficulty over its own length. An endless one keeps climbing
+   * well past where a bounded course would have ended — it reaches bounded-maximum at roughly
+   * one course length and then goes on tightening, so a long run is genuinely a harder run
+   * rather than the same course repeating.
+   */
+  get difficulty(): number {
+    if (!this.options.endless) return smoothstep(0.2, 1, this.progress);
+    const laps = this.player.y / COURSE_LENGTH;
+    return clamp(smoothstep(0.15, 1, laps) * 0.75 + Math.min(0.45, laps * 0.09), 0, 1.2);
+  }
+
   get multiplier(): number {
     return Math.min(1 + Math.floor(this.combo / this.mods.comboStep), COMBO_MAX_MULT);
   }
@@ -206,8 +230,8 @@ export class World {
     if (this.invulnTimer > 0) this.invulnTimer -= dt;
     this.cameraY = damp(this.cameraY, this.player.y - this.viewHeight * 0.32, 12, dt);
 
-    if (this.player.y >= COURSE_LENGTH) this.phase = "won";
-    else if (this.integrity <= 0) this.phase = "lost";
+    if (this.integrity <= 0) this.phase = "lost";
+    else if (!this.options.endless && this.player.y >= COURSE_LENGTH) this.phase = "won";
   }
 
   private movePlayer(dt: number): void {
@@ -215,7 +239,9 @@ export class World {
     // Speed climbs hard across the course. A 35% ramp was imperceptible; at 90% the last ten
     // seconds genuinely feel like a different game from the first ten, which is the build the
     // run was missing.
-    p.speed = BASE_SPEED * (1 + 0.9 * smoothstep(0.05, 1, this.progress));
+    p.speed = this.options.endless
+      ? BASE_SPEED * (1 + Math.min(1.35, this.player.y / COURSE_LENGTH * 0.75))
+      : BASE_SPEED * (1 + 0.9 * smoothstep(0.05, 1, this.progress));
 
     const prevX = p.x;
     const prevY = p.y;
@@ -553,21 +579,34 @@ export class World {
 
   private generate(): void {
     const limit = this.cameraY + this.viewHeight + 80;
-    while (this.spawnCursor < limit && this.spawnCursor < COURSE_LENGTH + 40) {
+    const end = this.options.endless ? Infinity : COURSE_LENGTH + 40;
+    while (this.spawnCursor < limit && this.spawnCursor < end) {
       this.spawnCursor += this.spawnPattern(this.spawnCursor);
     }
   }
 
   /** Emit one pattern at `y` and return how much course length it consumed. */
   private spawnPattern(y: number): number {
-    const t = clamp(y / COURSE_LENGTH, 0, 1);
     const rng = this.rng;
 
     if (y < OPENING_LENGTH) return this.openingLesson(y);
-    if (this.options.charged && y >= COURSE_LENGTH - PRESS_ZONE) return this.press(y);
+
+    if (this.options.charged) {
+      if (this.options.endless) {
+        // A Press every so often, so the endless run keeps its best moment on a rhythm rather
+        // than losing it along with the finish line. Each one picks a fresh colour.
+        if (y >= this.nextPressAt) {
+          this.pressPolarity = 0;
+          this.nextPressAt = y + PRESS_INTERVAL;
+          return this.press(y);
+        }
+      } else if (y >= COURSE_LENGTH - PRESS_ZONE) {
+        return this.press(y);
+      }
+    }
 
     const roll = rng.next();
-    const hard = smoothstep(0.2, 1, t);
+    const hard = clamp(this.difficultyAt(y), 0, 1);
 
     if (this.options.anchors) {
       // Pylons are this mechanic's only means of steering. If they are occasional set pieces
@@ -588,24 +627,59 @@ export class World {
       return rng.range(50, 64);
     }
 
-    if (roll < 0.2 + hard * 0.12) {
+    // Patterns crowd together as difficulty rises: the same shapes with less room to recover
+    // between them is a far better difficulty curve than simply adding more mines to each one.
+    const squeeze = 1 - hard * 0.14;
+
+    if (roll < 0.22 + hard * 0.12) {
       this.gauntlet(y, hard);
-      return rng.range(62, 78);
+      return rng.range(58, 72) * squeeze;
     }
-    if (roll < 0.42 && this.options.charged) {
+    if (roll < 0.44 && this.options.charged) {
       this.twinChoice(y);
-      return rng.range(70, 84);
+      return rng.range(64, 78) * squeeze;
     }
-    if (roll < 0.74) {
+    if (roll < 0.5 && hard > 0.45) {
+      this.sieve(y, hard);
+      return rng.range(60, 74) * squeeze;
+    }
+    if (roll < 0.8) {
       this.cluster(y, hard);
-      return rng.range(56, 70);
+      return rng.range(52, 66) * squeeze;
     }
-    if (roll < 0.9) {
+    if (roll < 0.94) {
       this.minefield(y, hard);
-      return rng.range(58, 72);
+      return rng.range(54, 68) * squeeze;
     }
     this.breather(y);
-    return rng.range(50, 64);
+    return rng.range(46, 60) * squeeze;
+  }
+
+  /** Difficulty at an arbitrary point, for generation running ahead of the player. */
+  private difficultyAt(y: number): number {
+    const laps = y / COURSE_LENGTH;
+    if (!this.options.endless) return smoothstep(0.2, 1, clamp(laps, 0, 1));
+    return smoothstep(0.15, 1, laps) * 0.75 + Math.min(0.45, laps * 0.09);
+  }
+
+  /**
+   * Two offset rows of hazards in opposing colours. Whichever colour you are, half of it is
+   * solid and half is food, so it can only be crossed by committing to one line — the first
+   * pattern in the game that cannot be solved by steering alone.
+   */
+  private sieve(y: number, hard: number): void {
+    const count = 5;
+    const span = TRACK_HALF * 2 - 6;
+    const first = this.rng.chance(0.5) ? 1 : -1;
+    for (let row = 0; row < 2; row++) {
+      const pol: Polarity = row === 0 ? (first as Polarity) : ((-first) as Polarity);
+      for (let i = 0; i < count; i++) {
+        const x = -TRACK_HALF + 3 + ((i + row * 0.5) / (count - 1)) * span;
+        if (x > TRACK_HALF - 2) continue;
+        this.addHazard(x, y + row * 13, "mine", pol, 0);
+      }
+    }
+    this.scrapArc(y + 26, this.rng.range(-14, 14), 6 + Math.floor(hard * 4), this.randomCharge(), 10);
   }
 
   /**
@@ -724,7 +798,7 @@ export class World {
   /** A wall of hazards with one gap, with reward laid out just past it. */
   private gauntlet(y: number, hard: number): void {
     const gapCenter = this.rng.range(-18, 18);
-    const gapWidth = 15 - hard * 3;
+    const gapWidth = 15 - hard * 3.5;
     const count = 7;
     // One colour for the whole wall. A mixed wall can never be ploughed through, so the
     // "match it and eat the entire thing" moment — the best thing this mechanic does — would
@@ -771,13 +845,13 @@ export class World {
         this.rng.chance(0.1) ? BIG_VALUE : SCRAP_VALUE,
       );
     }
-    if (hard > 0.45) {
+    if (hard > 0.4) {
       this.addHazard(cx + this.rng.range(-14, 14), y + this.rng.range(4, 20), "mine", pol, 8);
     }
   }
 
   private minefield(y: number, hard: number): void {
-    const n = 2 + Math.floor(hard * 3);
+    const n = 2 + Math.floor(hard * 4);
     const fieldPol = this.randomCharge();
     for (let i = 0; i < n; i++) {
       this.addHazard(

@@ -181,6 +181,11 @@ body {
   background: var(--blue);
 }
 
+/* Past the record: the bar is full and the colour says so. */
+#progress-fill.record {
+  background: var(--red);
+}
+
 .hint {
   position: absolute;
   left: 12px;
