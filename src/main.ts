@@ -618,10 +618,17 @@ class Game {
         ? `Furthest: ${Math.floor(this.save.endlessBest).toLocaleString()} m`
         : "No finish line. Beat your own distance.";
 
+    // The campaign is deliberately the quiet button until someone has played a few free runs.
+    // A first-timer offered a numbered objective has to understand the rule before they have
+    // seen it work; the same offer after three runs reads as "there is more here".
     const next = LEVELS[this.save.levelsDone];
-    el("levels-note").textContent = next
-      ? `${worldById(next.world).name} · level ${next.n} of ${total}`
-      : `All ${total} cleared · every seal earned`;
+    const warmedUp = this.save.runs >= 3 || this.save.levelsDone > 0;
+    el("btn-levels").classList.toggle("nudge", warmedUp);
+    el("levels-note").textContent = !next
+      ? `All ${total} cleared · every seal earned`
+      : warmedUp
+        ? `Want it harder? Level ${next.n} of ${total}`
+        : `${total} courses, four worlds`;
 
     const today = dailyCode();
     const done = this.save.dailyDate === today;

@@ -743,7 +743,11 @@ button.daily {
   padding: 13px 10px;
 }
 
-/* The campaign is the game's spine, so it is the only thing on the menu at this weight. */
+/*
+ * One button on the menu is at this weight, and it is whatever a first-time player should press
+ * without reading. That is the free run: no objective to fail, no lock, no explanation needed.
+ * The campaign is the deeper game, but it is the *second* thing you meet, not the first.
+ */
 button.headline {
   margin-top: 18px;
   padding: 22px 12px 18px;
@@ -753,6 +757,31 @@ button.headline {
 
 button.headline .daily-note {
   font-size: 10.5px;
+  opacity: 1;
+}
+
+/*
+ * Levels sits at the bottom of the menu in body type — present so it is never hidden, small
+ * enough that it does not compete with the free run for a new player's first tap.
+ */
+button.quiet.daily {
+  font-family: var(--body);
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  padding: 11px;
+  box-shadow: 3px 3px 0 var(--key);
+}
+
+/*
+ * Once someone has actually played, the campaign is worth pointing at — but with a dashed rule
+ * and a line of copy, not by growing the button back. The pull should come from the offer.
+ */
+button.quiet.daily.nudge {
+  border-style: dashed;
+}
+
+button.quiet.daily.nudge .daily-note {
   opacity: 1;
 }
 

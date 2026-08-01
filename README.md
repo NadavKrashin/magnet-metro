@@ -78,8 +78,14 @@ so a long run stays reactable rather than becoming a slideshow.
 
 ## The campaign
 
-Levels answer the question the endless run cannot: *what am I supposed to do next.* It is the
-headline on the menu, and everything else is secondary to it.
+Levels answer the question the endless run cannot: *what am I supposed to do next.*
+
+It is deliberately **not** the first thing on the menu. A first-time player who has never seen
+the colour rule work cannot evaluate a numbered objective, so the menu leads with Free Run —
+the one mode with nothing to fail — and keeps Levels at the bottom in body type. Once the save
+shows three runs played or a level already cleared, the button picks up a dashed rule and reads
+*"Want it harder? Level N of 24"*. The offer moves, not the button; the campaign is never
+hidden, just held back until it means something.
 
 **Four worlds, six levels each.** A world is the same generator run differently rather than a
 separate content pipeline — which costs a handful of numbers instead of a new authoring tool,
