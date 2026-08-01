@@ -26,7 +26,7 @@ Everything below serves that thesis. Anything that does not is a candidate for c
 ```bash
 npm install
 npm run dev          # dev server; open the printed network URL on a phone
-npm run test         # simulation, magnet, hazard-rule and level-reachability checks
+npm run test         # simulation, magnet, hazard, level, endless and economy checks
 npm run balance      # difficulty and skill-expression report across 12 seeds
 npm run standalone   # one self-contained HTML file in dist/standalone.html (94 kB)
 npm run verify       # build, prove progress persists, screenshot, report frame time
@@ -138,23 +138,19 @@ hazards; the skilled bot targets scrap and dodges. The gap between them is skill
 
 | Mechanic | Naive clear | Skilled clear | Skilled hits | Skill lift |
 |---|---|---|---|---|
-| **Switch** *(shipping)* | 75% | 100% | 0.2 | +1111% |
-| Overload *(parked)* | 50% | 100% | 0.1 | +266% |
-| Tether *(parked)* | 42% | 42% | 2.2 | +66% |
+| **Switch** *(shipping)* | 50% | 100% | 0.0 | +888% |
 
-Naive clear rate jumped from 8% to 50% for Switch when colour became a real rule, because a
-blindly tapping player now eats walls by accident about half the time. That is the mechanic
-being forgiving to a beginner and generous to an expert at the same time, which is the shape
-this genre needs.
+Read these as directional, not final. The naive bot never avoids anything, so real first-run
+completion sits above the naive figure.
 
-Read these as directional, not final. The naive bot is worse than a real first-time player
-because it never avoids anything, so true first-run completion sits somewhere above these
-numbers. The comparison *between* mechanics is the useful part.
+Naive clear sat at 75% before the courses were tightened. Deliberately crowding the patterns
+first took it to **zero**, which is the same failure as making the Press lethal — a difficulty
+change that reads as reasonable in the code can be brutal in play. Dialled back to 50%, with
+skilled play still clearing every course without a scratch.
 
-Naive clear rate is the number to watch: the genre wants roughly 80% of players finishing
-their first run, and Switch now sits at 75% with a bot that never avoids anything. Since a
-real beginner is better than that bot, the true figure is higher. The remaining honest step is
-human play, not another round of tuning against a robot.
+That gap between naive and skilled is the whole shape this genre needs: forgiving to somebody
+tapping blindly, enormously generous to somebody reading the course. The remaining honest step
+is human play, not another round of tuning against a robot.
 
 ## The Press
 
