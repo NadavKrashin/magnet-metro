@@ -92,7 +92,7 @@ export class PolarityMechanic implements Mechanic {
       }
     } else if (y < OPENING_LENGTH) {
       world.prompt = "YOUR COLOUR FEEDS YOU · THE OTHER HURTS";
-    } else if (world.pressPolarity !== 0 && y > COURSE_LENGTH - PRESS_ZONE - 90) {
+    } else if (this.pressNearby(world)) {
       // Called well before the wall is reachable. The whole point of the set piece is that
       // the player sees it coming and chooses; a wall you cannot prepare for is just a tax.
       if (this.polarity === world.pressPolarity) {
@@ -104,6 +104,20 @@ export class PolarityMechanic implements Mechanic {
     } else {
       world.prompt = "";
     }
+  }
+
+  /**
+   * True while a Press wall is genuinely close: the approach window ahead of the spawned
+   * wall, or the whole closing zone of a bounded course. Keyed to the wall's actual position
+   * rather than to course distance — a course-distance test is true forever in an endless
+   * run, which pinned the Press instruction to the screen with nothing on it to match.
+   */
+  private pressNearby(world: World): boolean {
+    if (world.pressPolarity === 0) return false;
+    const y = world.player.y;
+    if (!world.options.endless && y > COURSE_LENGTH - PRESS_ZONE - 90) return true;
+    const head = world.pressHeadY;
+    return head >= 0 && y > head - 120 && y < head + 45;
   }
 
   draw(ctx: CanvasRenderingContext2D, world: World, view: View): void {

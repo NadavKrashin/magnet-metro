@@ -153,6 +153,13 @@ export class World {
   private spawnCursor = 60;
   /** Colour of the closing set piece, decided once so the whole wall matches. */
   pressPolarity: Polarity = 0;
+  /**
+   * Course position where the next (or current) Press wall begins, or -1 before any has
+   * spawned. Prompts key off this rather than off raw course position — in an endless run the
+   * course position test is true forever, which left the Press instruction stuck on screen
+   * for the rest of the run while the nearest Press was a thousand metres away.
+   */
+  pressHeadY = -1;
   private inPress = false;
   /** Course distance at which the next endless Press is due. */
   private nextPressAt = COURSE_LENGTH * 0.72;
@@ -782,6 +789,10 @@ export class World {
     // One colour for the whole structure, fixed from the seed so a shared course always ends
     // the same way for everyone who plays it.
     if (this.pressPolarity === 0) this.pressPolarity = this.rng.chance(0.5) ? 1 : -1;
+
+    // The head marks where the wall the player is approaching begins. Stacked walls in the
+    // closing zone keep the first head until the player has actually passed through it.
+    if (this.pressHeadY < 0 || this.player.y > this.pressHeadY + 45) this.pressHeadY = y;
 
     const rows = 4;
     const across = 9;
