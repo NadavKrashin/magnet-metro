@@ -123,6 +123,13 @@ export interface RunStats {
    * past. This is the cost of staying one colour, and it was previously invisible.
    */
   missedWrongColour: number;
+  /**
+   * Seconds spent as each colour. The honest measure of camping: tap count is not, because
+   * the tap/drag discriminator counts a small thumb wobble as a tap, so a player who never
+   * deliberately changed colour can still finish with a dozen "actions".
+   */
+  timeBlue: number;
+  timeRed: number;
   hits: number;
   maxCombo: number;
   actions: number;

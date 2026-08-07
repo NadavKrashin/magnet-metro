@@ -204,6 +204,8 @@ export class World {
     gatesCrashed: 0,
     missed: 0,
     missedWrongColour: 0,
+    timeBlue: 0,
+    timeRed: 0,
     hits: 0,
     maxCombo: 0,
     actions: 0,
@@ -313,6 +315,8 @@ export class World {
 
     this.elapsed += dt;
     this.stats.duration = this.elapsed;
+    if (this.field.polarity === 1) this.stats.timeBlue += dt;
+    else if (this.field.polarity === -1) this.stats.timeRed += dt;
 
     this.movePlayer(dt);
     this.generate();

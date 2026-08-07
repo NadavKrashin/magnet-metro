@@ -7,7 +7,7 @@ import { GameAudio } from "./audio/audio";
 import { haptics } from "./audio/haptics";
 import { autopilot, newAutopilotState, type AutopilotState } from "./game/autopilot";
 import { makeGrainTile } from "./render/texture";
-import { COURSE_LENGTH, OPENING_LENGTH, VIEW_WIDTH, World } from "./game/world";
+import { COURSE_LENGTH, OPENING_LENGTH, SCRAP_VALUE, VIEW_WIDTH, World } from "./game/world";
 import {
   EDITIONS,
   UPGRADES,
@@ -863,18 +863,39 @@ class Game {
 
     const total = record.collected + record.missed;
     const pickup = total > 0 ? Math.round((record.collected / total) * 100) : 0;
+
+    // How much of the course went past uncollectable because of the colour the player was.
+    // Expressed against everything they actually banked plus everything they could not touch,
+    // so it reads as "the share of this run you locked yourself out of".
+    const reachableValue = record.score > 0 ? w.stats.collected * SCRAP_VALUE : 0;
+    const lockedOut = w.stats.missedWrongColour;
+    const missedShare =
+      reachableValue + lockedOut > 0
+        ? Math.round((lockedOut / (reachableValue + lockedOut)) * 100)
+        : 0;
+    const gatesMet = w.stats.gatesEaten + w.stats.gatesCrashed;
     const rows: [string, string][] = [
       ["Scrap collected", String(record.collected)],
       ["Pickup rate", `${pickup}%`],
       ["Best combo", String(record.maxCombo)],
       ["Hits taken", String(record.hits)],
-      ["Thumb actions", String(record.actions)],
+      // Named for what it actually is. "Thumb actions" measured colour changes and read as a
+      // generic input count, which told the player nothing about the decision it represents.
+      ["Colour changes", String(record.actions)],
       ["Time", `${record.duration.toFixed(1)}s`],
       ...(this.isEndless
         ? ([["Distance", `${endlessDistance.toLocaleString()} m`],
             ["Furthest ever", `${Math.floor(this.save.endlessBest).toLocaleString()} m`]] as [string, string][])
         : []),
       ["Mines swallowed", String(w.stats.absorbed)],
+      // The cost of the colour you were. Left off the sheet entirely until now, which meant
+      // the single biggest argument for using the game's only verb was invisible.
+      ...(missedShare > 0
+        ? ([["Left behind — wrong colour", `${missedShare}%`]] as [string, string][])
+        : []),
+      ...(w.stats.gatesCrashed > 0 || w.stats.gatesEaten > 0
+        ? ([["Gates matched", `${w.stats.gatesEaten} of ${gatesMet}`]] as [string, string][])
+        : []),
       ...(this.isDaily && streak > 0
         ? ([["Daily streak", `${streak} day${streak === 1 ? "" : "s"}`]] as [string, string][])
         : []),
@@ -911,10 +932,24 @@ class Game {
     // tells the player the meta exists, and the first purchase is where it hooks. It appends
     // rather than replaces: the record chase is still the reason to press Run Again.
     const buyable = affordableUpgrade(this.save);
-    const affordable =
+    const affordableLine =
       buyable && !(goal && goal.kind === "upgrade" && goal.remaining === 0)
         ? `<br><span class="goal-second">${buyable.label} is affordable — spend it in the workshop.</span>`
         : "";
+
+    // Somebody who left a third of the course behind is playing one colour, and the number on
+    // its own does not tell them what to do about it. This is the only place the game ever
+    // says the quiet part: the other half of the course was always available.
+    const colourTime = w.stats.timeBlue + w.stats.timeRed;
+    const onOneColour =
+      colourTime > 0 ? Math.max(w.stats.timeBlue, w.stats.timeRed) / colourTime : 0;
+    const campingLine =
+      onOneColour >= 0.85 && missedShare >= 33 && w.player.y > OPENING_LENGTH
+        ? `<br><span class="goal-second">You spent ${Math.round(onOneColour * 100)}% of that run on one colour. The other half was there for the taking.</span>`
+        : "";
+
+    // At most one nudge. Two red lines under a headline is a lecture, not a prompt.
+    const affordable = campingLine || affordableLine;
 
     el("result-goal").innerHTML = sealEarned
       ? `<b>${worldById(level!.world).name} complete.</b> ${sealEarned} earned — it cannot be bought.`
