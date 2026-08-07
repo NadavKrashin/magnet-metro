@@ -503,6 +503,13 @@ export interface WorldDef {
   spacingScale?: number;
   hazardBias?: number;
   midPresses?: number;
+  /**
+   * Whether courses in this world carry colour gates. Off only in the opening world, whose
+   * job is to be clearable while the rule is still being learned — a wall that cannot be
+   * steered around is the right pressure on somebody who understands the tap, and the wrong
+   * one on somebody still working out what it does.
+   */
+  colourGates?: boolean;
   /** Awarded for clearing every level in the world. Cannot be bought. */
   seal: string;
 }
@@ -512,6 +519,7 @@ export const WORLDS: WorldDef[] = [
     id: "proof",
     name: "Proof Sheet",
     blurb: "The first run off the press. Clean stock, room to think.",
+    colourGates: false,
     seal: "Proof Mark",
   },
   {
@@ -576,7 +584,10 @@ export const LEVELS: LevelDef[] = [
   // Night Shift — everything arrives sooner.
   { n: 7, world: "nightshift", seed: "LVL-0007", kind: "finish", target: 1, reward: 1200 },
   { n: 8, world: "nightshift", seed: "LVL-0008", kind: "combo", target: 120, reward: 1500 },
-  { n: 9, world: "nightshift", seed: "LVL-0009", kind: "press", target: 18, reward: 1700 },
+  // Press targets re-tuned when colour gates landed: a course now asks the player to match
+  // several walls on the way to the Press, so they arrive lined up less often than they did
+  // when the closing wall was the only thing worth matching.
+  { n: 9, world: "nightshift", seed: "LVL-0009", kind: "press", target: 9, reward: 1700 },
   { n: 10, world: "nightshift", seed: "LVL-0010", kind: "collect", target: 110, reward: 1900 },
   { n: 11, world: "nightshift", seed: "LVL-0011", kind: "score", target: 22000, reward: 2100 },
   { n: 12, world: "nightshift", seed: "LVL-0012", kind: "flawless", target: 1, reward: 2600, unlockEdition: "nightshift" },
@@ -593,9 +604,12 @@ export const LEVELS: LevelDef[] = [
   { n: 19, world: "final", seed: "LVL-0019", kind: "finish", target: 1, reward: 2600 },
   { n: 20, world: "final", seed: "LVL-0020", kind: "collect", target: 150, reward: 3200 },
   { n: 21, world: "final", seed: "LVL-0021", kind: "absorb", target: 28, reward: 3600 },
-  { n: 22, world: "final", seed: "LVL-0022", kind: "frugal", target: 30, reward: 4000 },
+  // The budget covers the gates. A thrift objective asks for deliberate taps rather than
+  // flailing, and every gate on the course is a tap the player is obliged to spend — so the
+  // allowance has to carry them or the objective is asking for something the course forbids.
+  { n: 22, world: "final", seed: "LVL-0022", kind: "frugal", target: 34, reward: 4000 },
   { n: 23, world: "final", seed: "LVL-0023", kind: "score", target: 42000, reward: 4600 },
-  { n: 24, world: "final", seed: "LVL-0024", kind: "press", target: 30, reward: 8000, unlockEdition: "blueprint" },
+  { n: 24, world: "final", seed: "LVL-0024", kind: "press", target: 22, reward: 8000, unlockEdition: "blueprint" },
 ];
 
 export function worldById(id: string): WorldDef {

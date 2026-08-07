@@ -390,6 +390,7 @@ class Game {
               spacingScale: wd.spacingScale,
               hazardBias: wd.hazardBias,
               midPresses: wd.midPresses,
+              colourGates: wd.colourGates ?? true,
             }
           : {}),
       },

@@ -30,6 +30,15 @@ export interface Hazard {
   absorbed: boolean;
   /** Part of the closing set piece. Costs haul rather than lives when mismatched. */
   press: boolean;
+  /**
+   * Part of a colour gate: a full-width wall with no gap, mid-course.
+   *
+   * Gates exist because every other wall in the game can be steered around, which made
+   * staying one colour a safe strategy that simply earned less. Like the Press they cost haul
+   * rather than lives — the point is that camping stops being comfortable, not that anybody
+   * starts dying.
+   */
+  gate: boolean;
 }
 
 export interface Anchor {
@@ -104,7 +113,16 @@ export interface RunStats {
   absorbed: number;
   /** Of those, how many belonged to a Press. Lets a level ask for the set piece specifically. */
   pressEaten: number;
+  /** Colour gates matched and swallowed whole. */
+  gatesEaten: number;
+  /** Colour gates crashed into on the wrong colour. */
+  gatesCrashed: number;
   missed: number;
+  /**
+   * Scrap value that could not be collected because it was the other colour when it went
+   * past. This is the cost of staying one colour, and it was previously invisible.
+   */
+  missedWrongColour: number;
   hits: number;
   maxCombo: number;
   actions: number;

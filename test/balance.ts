@@ -94,7 +94,25 @@ function summarise(results: Result[]) {
   };
 }
 
-const SEEDS = ["ALFA-001", "BRVO-002", "CHRL-003", "DLTA-004", "ECHO-005", "FXTR-006", "GOLF-007", "HTEL-008", "INDA-009", "JLIT-010", "KILO-011", "LIMA-012"];
+/**
+ * Widened from twelve to forty-eight.
+ *
+ * Naive clear rate is a headline number in the README and it is quoted when making difficulty
+ * decisions, but on twelve courses it moves in 8-point steps — a change of four courses reads
+ * as a 33-point swing. A generator change was once read as halving first-run completion when a
+ * controlled forty-seed comparison put the real effect at two points. Wide enough that the
+ * number can be trusted is worth more than a harness that finishes a few seconds sooner.
+ */
+const SEEDS = [
+  "ALFA-001", "BRVO-002", "CHRL-003", "DLTA-004", "ECHO-005", "FXTR-006",
+  "GOLF-007", "HTEL-008", "INDA-009", "JLIT-010", "KILO-011", "LIMA-012",
+  "MIKE-013", "NOVR-014", "OSCR-015", "PAPA-016", "QUBC-017", "ROMO-018",
+  "SIRA-019", "TNGO-020", "UNFM-021", "VCTR-022", "WHSK-023", "XRAY-024",
+  "YNKE-025", "ZULU-026", "ANVL-027", "BLTZ-028", "CDMM-029", "DRUM-030",
+  "EMBR-031", "FLNT-032", "GRPH-033", "HLIX-034", "INGT-035", "JOLT-036",
+  "KRBN-037", "LTHE-038", "MRQE-039", "NKEL-040", "OBLK-041", "PLTE-042",
+  "QUIR-043", "RSTR-044", "STNC-045", "TRCE-046", "UMBR-047", "VLLM-048",
+];
 
 const mechanics: Mechanic[] = [
   new PolarityMechanic(),

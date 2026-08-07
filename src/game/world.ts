@@ -41,6 +41,24 @@ const HAZARD_PULL_FACTOR = 0.22;
 export const PRESS_ZONE = 150;
 /** Distance between Presses in an endless run. */
 const PRESS_INTERVAL = 1150;
+/**
+ * Colour gates: a full-width wall of one colour with no gap, mid-course.
+ *
+ * Every other wall in this game has a gap, and wrong-colour hazards are inert, so staying one
+ * colour was a complete strategy — it finished 100% of courses without ever dying and banked
+ * 46% of what switching banked. A 2.2x opportunity cost that the player never sees is not a
+ * reason to do anything.
+ *
+ * The fix is frequency, not lethality. A gate cannot be steered around, so camping meets one
+ * every few seconds and pays in the currency the score actually runs on — the multiplier — but
+ * it never costs a cell. Making the Press lethal once dropped naive completion from 50% to
+ * zero; gates are built so that failure mode is impossible by construction.
+ */
+const GATE_INTERVAL = 230;
+/** Difficulty a course must reach before gates appear, so the early game stays gentle. */
+const GATE_MIN_DIFFICULTY = 0.2;
+/** Fraction of the chain scattered by crossing a gate on the wrong colour. */
+const GATE_CHAIN_COST = 0.25;
 /** Course distance given over to the scripted teaching sequence. */
 export const OPENING_LENGTH = 290;
 /** The compressed warm-up that replaces the lesson once the save shows the rule is learned. */
@@ -66,7 +84,7 @@ export interface WorldEvents {
    * which costs the haul rather than the run — a different event that deserves to land
    * differently in the hand and in the ear.
    */
-  onHit(kind: "cell" | "press"): void;
+  onHit(kind: "cell" | "press" | "gate"): void;
   onFlip(toRed: boolean): void;
   /** The player just passed their own furthest distance. */
   onRecord(): void;
@@ -106,6 +124,15 @@ export interface WorldOptions {
    * dailies and shared courses must build identically for every player, learned or not.
    */
   shortOpening?: boolean | undefined;
+
+  /**
+   * Spawn colour gates once the course is hard enough. Off for the opening world, whose whole
+   * job is to be clearable while the player is still learning, and on everywhere else.
+   *
+   * Deliberately part of the course's identity rather than the player's save: a daily or a
+   * shared link has to build identically on every device.
+   */
+  colourGates?: boolean | undefined;
 }
 
 export class World {
@@ -173,7 +200,10 @@ export class World {
     collected: 0,
     absorbed: 0,
     pressEaten: 0,
+    gatesEaten: 0,
+    gatesCrashed: 0,
     missed: 0,
+    missedWrongColour: 0,
     hits: 0,
     maxCombo: 0,
     actions: 0,
@@ -190,7 +220,13 @@ export class World {
    * for the rest of the run while the nearest Press was a thousand metres away.
    */
   pressHeadY = -1;
+  /** Colour of the gate currently ahead, and where it stands. -1 when there is none. */
+  gatePolarity: Polarity = 0;
+  gateHeadY = -1;
+  /** Course distance at which the next gate is due. */
+  private nextGateAt = -1;
   private inPress = false;
+  private inGate = false;
   /** Course distance at which the next endless Press is due. */
   private nextPressAt = COURSE_LENGTH * 0.72;
   /** Reset so a bounded world with mid-course Presses starts counting from the lesson's end. */
@@ -440,6 +476,7 @@ export class World {
         // finishing small, not failing to finish — every run needs to reach its ending, both
         // because that is the shape of a satisfying arc and because the ending is the clip.
         if (h.press) this.crashPress(h);
+        else if (h.gate) this.crashGate(h);
         else this.takeHit(h);
       }
     }
@@ -480,6 +517,7 @@ export class World {
     this.stats.collected += 1;
     this.stats.absorbed += 1;
     if (h.press) this.stats.pressEaten += 1;
+    if (h.gate) this.stats.gatesEaten += 1;
     this.collectPulse = 1;
 
     // The whole reason to change colour, so it gets the full treatment: a shove, a freeze,
@@ -515,6 +553,33 @@ export class World {
     this.burst(this.player.x, this.player.y, 30, ink.blue);
     this.float(this.player.x, this.player.y + 5, "NEW RECORD", ink.blue);
     this.events?.onRecord();
+  }
+
+  /**
+   * Crossing a colour gate on the wrong colour.
+   *
+   * The multiplier is the real cost. Score runs on the combo, so resetting it is what makes
+   * camping expensive in a way the player can feel immediately — the number stops climbing —
+   * without ever threatening the run. A quarter of the tail scatters so the loss is visible
+   * as well as numeric.
+   */
+  private crashGate(h: Hazard): void {
+    this.stats.gatesCrashed += 1;
+    this.combo = 0;
+    this.invulnTimer = INVULN_AFTER_HIT;
+    this.shake = Math.min(this.shake + 1.4, 2.6);
+    this.hitFlash = 1;
+    this.hitStop = Math.max(this.hitStop, 0.09);
+
+    const lost = Math.ceil(this.chain.length * GATE_CHAIN_COST);
+    for (let i = 0; i < lost; i++) {
+      const item = this.chain.pop();
+      if (!item) break;
+      this.burst(item.x, item.y, 4, ink.key);
+    }
+    this.burst(h.x, h.y, 18, ink.key);
+    this.float(this.player.x, this.player.y + 4, "WRONG COLOUR", ink.key);
+    this.events?.onHit("gate");
   }
 
   /** Mismatching the press: it costs most of what you were carrying, but not a cell. */
@@ -597,6 +662,10 @@ export class World {
       if (s.taken) return false;
       if (s.y < behind) {
         this.stats.missed += 1;
+        // Whether it was even collectable when it went past. A piece the player could never
+        // have taken is the cost of the colour they chose, and it is the whole argument for
+        // changing colour — which they cannot weigh while it stays invisible.
+        if (!this.matchesField(s.polarity)) this.stats.missedWrongColour += s.value;
         return false;
       }
       return true;
@@ -704,6 +773,19 @@ export class World {
 
     const roll = rng.next();
     const hard = clamp(this.difficultyAt(y), 0, 1);
+
+    // A gate, once the course has warmed up. Checked after the Press so the closing set piece
+    // always wins the slot, and never inside the run-up to one — two un-dodgeable walls back
+    // to back is a gauntlet nobody asked for.
+    if (this.options.charged && (this.options.colourGates ?? true) && hard >= GATE_MIN_DIFFICULTY) {
+      if (this.nextGateAt < 0) this.nextGateAt = y + GATE_INTERVAL * 0.5;
+      const nearPress =
+        !this.options.endless && y > COURSE_LENGTH - PRESS_ZONE - 140;
+      if (y >= this.nextGateAt && !nearPress) {
+        this.nextGateAt = y + GATE_INTERVAL;
+        return this.colourGate(y);
+      }
+    }
 
     if (this.options.anchors) {
       // Pylons are this mechanic's only means of steering. If they are occasional set pieces
@@ -870,6 +952,34 @@ export class World {
     return rows * 9 + 14;
   }
 
+  /**
+   * A colour gate: one full-width row, no gap, in a single colour.
+   *
+   * The only honest answer to "why would I ever change colour?". Everything else on the
+   * course can be steered around; this cannot. Match it and you swallow the whole row, which
+   * is the best thing this mechanic does. Get it wrong and it costs the multiplier and a
+   * quarter of the tail — never a cell, so it can raise the skill ceiling without raising the
+   * floor a beginner has to clear.
+   *
+   * Deliberately alternates colour from the previous gate. Two of the same in a row would let
+   * a camper who happens to be on that colour ride a whole stretch for free.
+   */
+  private colourGate(y: number): number {
+    this.gatePolarity = this.gatePolarity === 1 ? -1 : this.gatePolarity === -1 ? 1 : this.rng.chance(0.5) ? 1 : -1;
+    this.gateHeadY = y;
+
+    const across = 9;
+    this.inGate = true;
+    for (let i = 0; i < across; i++) {
+      const x = -TRACK_HALF + 2.5 + (i / (across - 1)) * (TRACK_HALF * 2 - 5);
+      this.addHazard(x, y, "block", this.gatePolarity, 0);
+    }
+    this.inGate = false;
+    // Reward laid out just past it, so eating the gate flows straight into a pickup run.
+    this.scrapArc(y + 20, this.rng.range(-12, 12), 7, this.gatePolarity, 10);
+    return 46;
+  }
+
   private randomCharge(): Polarity {
     if (!this.options.charged) return 0;
     return this.rng.chance(0.5) ? 1 : -1;
@@ -1013,6 +1123,7 @@ export class World {
       driftPhase: this.rng.range(0, Math.PI * 2),
       absorbed: false,
       press: this.inPress,
+      gate: this.inGate,
     });
   }
 }

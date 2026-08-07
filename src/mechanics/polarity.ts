@@ -74,13 +74,17 @@ export class PolarityMechanic implements Mechanic {
     // that is actually teaching; replayed for the hundredth time they are just clutter over
     // the first eight seconds of every single run.
     if (world.options.shortOpening) {
-      world.prompt = this.pressNearby(world)
-        ? this.polarity === world.pressPolarity
-          ? "THE PRESS — EAT IT ALL"
-          : "THE PRESS — TAP TO MATCH IT"
-        : "";
-      world.promptUrgent =
-        world.prompt.length > 0 && this.polarity !== world.pressPolarity;
+      if (this.pressNearby(world)) {
+        const matched = this.polarity === world.pressPolarity;
+        world.prompt = matched ? "THE PRESS — EAT IT ALL" : "THE PRESS — TAP TO MATCH IT";
+        world.promptUrgent = !matched;
+      } else if (this.gateNearby(world)) {
+        const matched = this.polarity === world.gatePolarity;
+        world.prompt = matched ? "GATE — EAT IT" : "GATE — TAP TO MATCH";
+        world.promptUrgent = !matched;
+      } else {
+        world.prompt = "";
+      }
       return;
     }
 
@@ -115,9 +119,27 @@ export class PolarityMechanic implements Mechanic {
         world.prompt = "THE PRESS — TAP TO MATCH IT";
         world.promptUrgent = true;
       }
+    } else if (this.gateNearby(world)) {
+      if (this.polarity === world.gatePolarity) {
+        world.prompt = "GATE — EAT IT";
+      } else {
+        world.prompt = "GATE — TAP TO MATCH";
+        world.promptUrgent = true;
+      }
     } else {
       world.prompt = "";
     }
+  }
+
+  /**
+   * True on the approach to a colour gate. A shorter window than the Press gets: gates are
+   * one row rather than four, they come around every few seconds, and a warning that lingers
+   * is the thing that turned the Press prompt into wallpaper in the first place.
+   */
+  private gateNearby(world: World): boolean {
+    if (world.gatePolarity === 0 || world.gateHeadY < 0) return false;
+    const y = world.player.y;
+    return y > world.gateHeadY - 70 && y < world.gateHeadY + 10;
   }
 
   /**
