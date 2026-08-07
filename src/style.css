@@ -192,6 +192,28 @@ body {
   gap: 5px;
 }
 
+/* A cell is gone. Three different outcomes print a full-screen flash and only this one costs a
+   life, so the readout that actually changed is what announces it. */
+.integrity.lost {
+  animation: cell-lost 0.42s steps(1, end);
+}
+
+@keyframes cell-lost {
+  0%,
+  40% {
+    transform: translateX(-3px) scale(1.35);
+    filter: invert(1);
+  }
+  20%,
+  60% {
+    transform: translateX(3px) scale(1.35);
+    filter: none;
+  }
+  100% {
+    transform: none;
+  }
+}
+
 .cell {
   width: 13px;
   height: 13px;

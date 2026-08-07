@@ -198,6 +198,15 @@ export class World {
   absorbStreak = 0;
   private absorbStreakTimer = 0;
   /**
+   * Stops one wall charging its penalty once per block. Deliberately separate from
+   * `invulnTimer`: a wall you got wrong must not also shield you from the mines beyond it.
+   */
+  crashCooldown = 0;
+  /** A wall got wrong — costs haul, never a cell, and must not look like one that does. */
+  crashFlash = 0;
+  /** Contact absorbed by the mercy window after a hit. Acknowledged, not punished. */
+  grazeFlash = 0;
+  /**
    * Seconds of near-frozen time after a big impact. A brief hitch is the cheapest way to make
    * a hit land — the eye reads the pause as weight.
    */
@@ -498,13 +507,26 @@ export class World {
 
       if (absorbable) {
         this.absorbHazard(h);
-      } else if (this.invulnTimer <= 0 && !f.invulnerable) {
+      } else if (h.press || h.gate) {
         // The closing set piece gambles the haul, never the run. Getting it wrong should mean
         // finishing small, not failing to finish — every run needs to reach its ending, both
         // because that is the shape of a satisfying arc and because the ending is the clip.
-        if (h.press) this.crashPress(h);
-        else if (h.gate) this.crashGate(h);
-        else this.takeHit(h);
+        //
+        // Gated by its own short cooldown rather than by invulnerability. A wall is many
+        // blocks and must only charge once, but it used to buy 1.1 seconds of immunity to
+        // *everything* — so failing a gate protected you from the mines just past it. Getting
+        // a wall wrong should cost the haul, not hand out a shield.
+        if (this.crashCooldown <= 0 && !f.invulnerable) {
+          if (h.press) this.crashPress(h);
+          else this.crashGate(h);
+        }
+      } else if (this.invulnTimer <= 0 && !f.invulnerable) {
+        this.takeHit(h);
+      } else if (this.invulnTimer > 0) {
+        // Contact that the mercy window is swallowing. Silence here is exactly what reads as
+        // "I hit that and nothing happened", so it gets a small acknowledgement — enough to
+        // say the game saw it, far short of the slam a real hit prints.
+        this.grazeFlash = Math.max(this.grazeFlash, 0.6);
       }
     }
   }
@@ -606,9 +628,10 @@ export class World {
   private crashGate(h: Hazard): void {
     this.stats.gatesCrashed += 1;
     this.combo = 0;
-    this.invulnTimer = INVULN_AFTER_HIT;
+    // Long enough to cross one row, and nothing more. It is not invulnerability.
+    this.crashCooldown = 0.4;
     this.shake = Math.min(this.shake + 1.4, 2.6);
-    this.hitFlash = 1;
+    this.crashFlash = 1;
     this.hitStop = Math.max(this.hitStop, 0.09);
 
     const lost = Math.ceil(this.chain.length * GATE_CHAIN_COST);
@@ -625,9 +648,10 @@ export class World {
   /** Mismatching the press: it costs most of what you were carrying, but not a cell. */
   private crashPress(h: Hazard): void {
     this.combo = 0;
-    this.invulnTimer = INVULN_AFTER_HIT;
+    // Four rows deep, so the window has to span the whole structure.
+    this.crashCooldown = 0.9;
     this.shake = Math.min(this.shake + 2.2, 3);
-    this.hitFlash = 1;
+    this.crashFlash = 1;
     this.hitStop = Math.max(this.hitStop, 0.13);
 
     const lost = Math.ceil(this.chain.length * 0.45);
@@ -658,7 +682,9 @@ export class World {
       this.burst(item.x, item.y, 4, ink.key);
     }
     this.burst(h.x, h.y, 22, ink.red);
-    this.float(this.player.x, this.player.y + 4, "-" + lost, ink.red);
+    // Names the thing that was actually spent. It used to read "-12", the number of tail
+    // pieces scattered, which looks like a score penalty and says nothing about the cell.
+    this.float(this.player.x, this.player.y + 4, "-1 CELL", ink.red);
     this.events?.onHit("cell");
   }
 
@@ -722,6 +748,9 @@ export class World {
       if (this.absorbStreakTimer <= 0) this.absorbStreak = 0;
     }
     this.hitFlash = Math.max(0, this.hitFlash - dt * 2.5);
+    this.crashFlash = Math.max(0, this.crashFlash - dt * 3.2);
+    this.grazeFlash = Math.max(0, this.grazeFlash - dt * 6);
+    if (this.crashCooldown > 0) this.crashCooldown -= dt;
     this.absorbFlash = Math.max(0, this.absorbFlash - dt * 4.5);
 
     for (let i = this.particles.length - 1; i >= 0; i--) {

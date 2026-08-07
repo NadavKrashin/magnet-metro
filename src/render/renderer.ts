@@ -603,17 +603,46 @@ export class Renderer implements View {
       ctx.restore();
     }
 
+    /**
+     * Three ways a run can go wrong, and they used to print the same image — which is why a
+     * play test reported that hitting an obstacle sometimes seemed not to cost a life. It
+     * often genuinely did not, and nothing on screen said which had happened.
+     *
+     *   hitFlash    a cell is gone. Red *and* the key plate, the heaviest thing here.
+     *   crashFlash  a wall got wrong. Key only, lighter: it cost the haul, not the run.
+     *   grazeFlash  the mercy window swallowed a contact. A hairline, barely there.
+     */
     if (world.hitFlash > 0.001) {
       ctx.save();
       ctx.globalCompositeOperation = "multiply";
       ctx.globalAlpha = world.hitFlash * 0.4;
       ctx.fillStyle = ink.red;
       ctx.fillRect(0, 0, this.cw, this.ch);
-      // The key plate on top of the red. This is what makes damage read as darkening at a
-      // glance, against a swallow that reads as brightening.
       ctx.globalAlpha = world.hitFlash * 0.3;
       ctx.fillStyle = ink.key;
       ctx.fillRect(0, 0, this.cw, this.ch);
+      ctx.restore();
+    }
+
+    if (world.crashFlash > 0.001) {
+      // No red at all. Losing a wall is a smear of black across the sheet — a misprint, not
+      // an injury — so it cannot be mistaken for the cell being taken.
+      ctx.save();
+      ctx.globalCompositeOperation = "multiply";
+      ctx.globalAlpha = world.crashFlash * 0.26;
+      ctx.fillStyle = ink.key;
+      ctx.fillRect(0, 0, this.cw, this.ch);
+      ctx.restore();
+    }
+
+    if (world.grazeFlash > 0.001) {
+      // Just the margins, so the eye registers contact without the page being touched.
+      ctx.save();
+      ctx.globalCompositeOperation = "multiply";
+      ctx.globalAlpha = world.grazeFlash * 0.5;
+      ctx.strokeStyle = ink.key;
+      ctx.lineWidth = Math.max(2, this.scale * 0.5);
+      ctx.strokeRect(0, 0, this.cw, this.ch);
       ctx.restore();
     }
 

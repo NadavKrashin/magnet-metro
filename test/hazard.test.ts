@@ -123,10 +123,12 @@ g.combo = 40;
 const gateBlock = hazard(-1, 3.1, false, true);
 gateBlock.y = 3;
 g.hazards.push(gateBlock);
-// Held for less than the invulnerability window, so this measures one crossing. A real drone
-// always moves forward through a one-row gate; only a test can loiter inside one.
+// Held for less than the gate's own crash cooldown (0.4s), so this measures a single crossing.
+// A real drone always moves forward through a one-row gate; only a test can loiter inside one,
+// and past the cooldown a second charge is correct — the wall is meant to bill again if you
+// are somehow still inside it.
 const gy0 = g.player.y;
-for (let i = 0; i < 40; i++) {
+for (let i = 0; i < 20; i++) {
   g.field.polarity = 1;
   g.step(DT);
   g.player.y = gy0;
