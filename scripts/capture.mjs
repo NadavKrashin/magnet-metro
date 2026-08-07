@@ -14,7 +14,8 @@
 import { chromium } from "playwright";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { mkdirSync, renameSync, readdirSync } from "node:fs";
+import { existsSync, mkdirSync, renameSync, readdirSync, statSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const out = join(root, "marketing");
@@ -62,6 +63,56 @@ if (produced.length > 0) {
   const latest = produced.sort().at(-1);
   renameSync(join(out, latest), join(out, "gameplay-1080x1920.webm"));
   console.log(`wrote marketing/gameplay-1080x1920.webm (${seconds}s)`);
+  toMp4(join(out, "gameplay-1080x1920.webm"), join(out, "gameplay-1080x1920.mp4"));
+}
+
+/**
+ * Playwright records WebM; every feed and store wants H.264 in an MP4. That conversion used to
+ * be a manual step documented in MARKETING.md, which is one more thing to forget between
+ * capturing footage and posting it — and the whole point of capturing from the canvas is that
+ * iterating on creative takes minutes.
+ *
+ * Silent on purpose: the game's audio is synthesised at runtime and is not captured, so music
+ * is added in an editor afterwards.
+ */
+function toMp4(from, to) {
+  const ffmpeg = findFfmpeg();
+  if (!ffmpeg) {
+    console.log("  (no ffmpeg found — convert manually:");
+    console.log(`   ffmpeg -i ${from} -c:v libx264 -pix_fmt yuv420p -crf 20 ${to})`);
+    return;
+  }
+  try {
+    execFileSync(
+      ffmpeg,
+      ["-y", "-i", from, "-c:v", "libx264", "-preset", "slow", "-crf", "20",
+       "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-an", to],
+      { stdio: "ignore" },
+    );
+    const mb = (statSync(to).size / 1024 / 1024).toFixed(1);
+    console.log(`wrote marketing/gameplay-1080x1920.mp4 (${mb} MB, H.264, silent)`);
+  } catch {
+    console.log("  (ffmpeg failed; the .webm is still usable, convert it by hand)");
+  }
+}
+
+/** Prefer a real ffmpeg on PATH, fall back to the one Python's imageio-ffmpeg ships. */
+function findFfmpeg() {
+  try {
+    execFileSync("ffmpeg", ["-version"], { stdio: "ignore" });
+    return "ffmpeg";
+  } catch {
+    // Not on PATH.
+  }
+  try {
+    const p = execFileSync("python3", ["-c", "import imageio_ffmpeg,sys;sys.stdout.write(imageio_ffmpeg.get_ffmpeg_exe())"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    return p && existsSync(p) ? p : null;
+  } catch {
+    return null;
+  }
 }
 
 // ---------------------------------------------------------------------------

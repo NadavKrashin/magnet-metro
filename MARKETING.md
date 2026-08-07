@@ -33,14 +33,22 @@ Capturing the canvas directly beats filming a phone: no glare, no moiré, consis
 and you can iterate creative in minutes instead of re-shooting. Pass `--seconds 30` for longer
 footage.
 
-**One conversion step is still yours.** The recording is `.webm`; TikTok and both stores want
-`.mp4`. Any converter will do:
+**The MP4 is produced for you.** Playwright records WebM; every feed and store wants H.264, so
+`npm run capture` now converts automatically when it can find `ffmpeg` (on `PATH`, or the copy
+Python's `imageio-ffmpeg` ships). You get both:
 
-```bash
-ffmpeg -i marketing/gameplay-1080x1920.webm -c:v libx264 -pix_fmt yuv420p -crf 20 out.mp4
-```
+- `marketing/gameplay-1080x1920.mp4` — H.264, `yuv420p`, faststart, **silent**
+- `marketing/gameplay-1080x1920.webm` — the original recording
 
-Add music in the editor — the game's audio is synthesised live and is not captured.
+If no `ffmpeg` is found, the script prints the one-line command instead of failing.
+
+**1080×1920 is the right size for TikTok, Reels, Shorts and Play's promo video.** App Store
+app previews have their own accepted dimensions per device class — check the current
+requirement in App Store Connect and resize that one export if it differs; everything else can
+use this file as-is.
+
+**Add music in an editor.** The game's audio is synthesised live in WebAudio and is not
+captured, so the export is deliberately silent rather than accidentally so.
 
 ## Store listing copy
 
