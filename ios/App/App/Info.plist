@@ -39,11 +39,65 @@
 	     and the app must stay fully usable if the player declines. -->
 	<key>NSUserTrackingUsageDescription</key>
 	<string>Allow tracking so the ads you see are more relevant. The game plays exactly the same either way.</string>
+	<!-- SKAdNetworkItems — iOS install attribution.
+	     ==========================================================================
+	     THIS LIST IS INCOMPLETE. BEFORE SUBMITTING, RUN THIS ON A MACHINE THAT CAN
+	     REACH developers.google.com:  node scripts/skadnetwork.mjs  (then again
+	     with the write flag, as printed by the script itself).
+	     ==========================================================================
+	     A buying network whose identifier is absent here does not report installs at
+	     all, so a short list silently under-counts iOS acquisition and makes every
+	     paid test look worse than it was. Google publishes the authoritative list at
+	     https://developers.google.com/admob/ios/3p-skadnetworks and adds to it over
+	     time, which is why this is refreshed by a script rather than pasted once.
+	     Below is Google's own identifier plus a partial set of buyers; the full
+	     published list is several times longer. -->
 	<key>SKAdNetworkItems</key>
 	<array>
 		<dict>
+			<!-- Google. Must always be present. -->
 			<key>SKAdNetworkIdentifier</key>
 			<string>cstr6suwn9.skadnetwork</string>
+		</dict>
+		<dict>
+			<!-- Aarki -->
+			<key>SKAdNetworkIdentifier</key>
+			<string>4fzdc2evr5.skadnetwork</string>
+		</dict>
+		<dict>
+			<!-- Adform -->
+			<key>SKAdNetworkIdentifier</key>
+			<string>2fnua5tdw4.skadnetwork</string>
+		</dict>
+		<dict>
+			<!-- Adikteev -->
+			<key>SKAdNetworkIdentifier</key>
+			<string>ydx93a7ass.skadnetwork</string>
+		</dict>
+		<dict>
+			<!-- Amazon -->
+			<key>SKAdNetworkIdentifier</key>
+			<string>p78axxw29g.skadnetwork</string>
+		</dict>
+		<dict>
+			<!-- Appier -->
+			<key>SKAdNetworkIdentifier</key>
+			<string>v72qych5uu.skadnetwork</string>
+		</dict>
+		<dict>
+			<!-- AppLovin -->
+			<key>SKAdNetworkIdentifier</key>
+			<string>ludvb6z3bs.skadnetwork</string>
+		</dict>
+		<dict>
+			<!-- Arpeely -->
+			<key>SKAdNetworkIdentifier</key>
+			<string>cp8zw746q7.skadnetwork</string>
+		</dict>
+		<dict>
+			<!-- Base -->
+			<key>SKAdNetworkIdentifier</key>
+			<string>3sh42y64q3.skadnetwork</string>
 		</dict>
 	</array>
 	<key>UISupportedInterfaceOrientations</key>
