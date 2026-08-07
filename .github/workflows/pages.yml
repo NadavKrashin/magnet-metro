@@ -1,0 +1,60 @@
+name: Deploy web build
+
+# The hosted page is not decoration: it is what every shared run link opens, where the privacy
+# policy and app-ads.txt live, and the thing posted to communities so people can play in three
+# seconds instead of installing. A stale copy of it is worse than none, because the link people
+# judge the game by is the one they were sent.
+#
+# BEFORE THIS WORKS: GitHub -> Settings -> Pages -> Source must be set to "GitHub Actions".
+# If it is still set to "Deploy from a branch", this workflow will fail at the deploy step.
+
+on:
+  push:
+    branches: ["**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never let two deploys race; queue rather than cancel, so a deploy in flight finishes.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build and publish docs/
+    # Only ever from the default branch, whatever it happens to be called. Written against
+    # the repository's own setting rather than a hardcoded name, so renaming the default
+    # branch to main does not silently stop deployments.
+    if: github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Rebuilds the single-file game and refreshes docs/, so the published page always matches
+      # the committed source rather than whenever someone last remembered to run it.
+      - name: Build the page
+        run: npm run web
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+
+      - id: deployment
+        uses: actions/deploy-pages@v4

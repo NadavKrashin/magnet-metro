@@ -11,7 +11,7 @@
  *   node scripts/capture.mjs            # video + screenshots at every store size
  *   node scripts/capture.mjs --seconds 30
  */
-import { chromium } from "playwright";
+import { launchChromium } from "./browser.mjs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { existsSync, mkdirSync, renameSync, readdirSync, statSync } from "node:fs";
@@ -24,8 +24,6 @@ mkdirSync(out, { recursive: true });
 const args = process.argv.slice(2);
 const seconds = Number(args[args.indexOf("--seconds") + 1]) || 22;
 const gameUrl = `file://${join(root, "dist", "standalone.html")}?demo=1`;
-
-const CHROME = "/opt/pw-browsers/chromium-1194/chrome-linux/chrome";
 
 /**
  * Store screenshot sizes. Both stores reject uploads at the wrong dimensions, and these are
@@ -41,7 +39,7 @@ const SHOT_SIZES = [
 // Video: a single unbroken run at 1080x1920, the aspect every vertical feed wants.
 // ---------------------------------------------------------------------------
 
-const videoBrowser = await chromium.launch({ executablePath: CHROME });
+const videoBrowser = await launchChromium();
 const videoContext = await videoBrowser.newContext({
   viewport: { width: 540, height: 960 },
   deviceScaleFactor: 2,
@@ -119,7 +117,7 @@ function findFfmpeg() {
 // Screenshots: caught mid-run at each store size, when the screen is actually busy.
 // ---------------------------------------------------------------------------
 
-const shotBrowser = await chromium.launch({ executablePath: CHROME });
+const shotBrowser = await launchChromium();
 
 for (const size of SHOT_SIZES) {
   // Render at half the pixel dimensions with a 2x scale factor, so text and linework are

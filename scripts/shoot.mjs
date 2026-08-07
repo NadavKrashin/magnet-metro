@@ -8,7 +8,7 @@
  *
  * Usage: node scripts/shoot.mjs
  */
-import { chromium } from "playwright";
+import { launchChromium } from "./browser.mjs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { mkdirSync } from "node:fs";
@@ -17,11 +17,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const outDir = join(root, "shots");
 mkdirSync(outDir, { recursive: true });
 
-// The preinstalled browser in this environment does not match the npm package's expected
-// build number, so point at it explicitly rather than downloading a second copy.
-const browser = await chromium.launch({
-  executablePath: "/opt/pw-browsers/chromium-1194/chrome-linux/chrome",
-});
+const browser = await launchChromium();
 const page = await browser.newPage({
   viewport: { width: 390, height: 844 },
   deviceScaleFactor: 2,

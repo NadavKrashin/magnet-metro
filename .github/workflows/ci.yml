@@ -1,0 +1,94 @@
+name: CI
+
+# The test suite is the thing that keeps this game's rules true. It already asserts that all
+# twenty-four levels stay clearable, that a matching hazard can never damage the drone, that
+# one colour is not a viable strategy, and that the shop cannot be emptied in an evening —
+# properties that a small tuning change breaks silently and that nobody notices by playing.
+# None of it was enforced until now.
+
+# Pull requests cover every feature branch, so pushes are watched only on the trunk. Listing
+# both the current default branch name and `main` means renaming it later does not silently
+# stop CI — and it avoids the usual duplicate run when a branch with an open PR is pushed to.
+on:
+  push:
+    branches:
+      - main
+      - master
+      - claude/arcade-game-ad-monetization-l3h8ep
+  pull_request:
+  workflow_dispatch:
+
+# A newer push to the same branch makes the older run irrelevant.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Build and test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # `npm run build` runs `tsc --noEmit` first, so this covers type checking too.
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm run test
+
+      # Not a pass/fail gate: the balance figures are judgement calls, not assertions, and a
+      # difficulty change that moves them is often deliberate. Printed into the log so the
+      # numbers behind a change are visible in the PR that made it.
+      - name: Balance report
+        run: npm run balance
+
+  verify:
+    name: Verify in a real browser
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Only Chromium, and only its own dependencies. Installing every browser roughly triples
+      # this step for engines the project never uses.
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Build single-file bundle
+        run: npm run standalone
+
+      # Getting the boot order wrong here fails silently and severely — the game would build a
+      # blank save before the real one loaded, and a player would lose everything. It has to be
+      # proven in a real browser rather than reasoned about.
+      - name: Progress survives a reload
+        run: node scripts/persist-check.mjs
+
+      # Catches the class of bug unit tests never see: a canvas call that throws, a missing
+      # element, a composite mode that silently blanks the page.
+      - name: Play the built game and report frame time
+        run: node scripts/shoot.mjs
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: shots/
+          if-no-files-found: ignore
+          retention-days: 14

@@ -7,7 +7,7 @@
  *
  * Usage: node scripts/icon.mjs   →   resources/icon.png, resources/splash.png
  */
-import { chromium } from "playwright";
+import { launchChromium } from "./browser.mjs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { mkdirSync } from "node:fs";
@@ -99,9 +99,7 @@ const draw = `(w, h, markScale, bleed) => {
   x.stroke();
 }`;
 
-const browser = await chromium.launch({
-  executablePath: "/opt/pw-browsers/chromium-1194/chrome-linux/chrome",
-});
+const browser = await launchChromium();
 const page = await browser.newPage();
 await page.setContent('<canvas id="c"></canvas>');
 
