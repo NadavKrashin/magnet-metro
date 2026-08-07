@@ -9,13 +9,53 @@ emits every event either way; without a sink they simply have nowhere to land.
 retention cohorts and funnels for you in a console — which is the actual question you are
 asking. A raw event log does not answer it without a lot more work.
 
-```bash
-npm install @capacitor-firebase/analytics firebase
-```
+### Firebase, step by step
 
-Then create a Firebase project, add `google-services.json` (Android) and
-`GoogleService-Info.plist` (iOS) to the native projects, set `USE_FIREBASE = true`, and
-`npm run sync`.
+The packages are installed and both native projects are synced — `@capacitor-firebase/analytics`
+appears in `Package.swift` and in the Android plugin list. What is left needs your Firebase
+project.
+
+**1. Register both apps in the Firebase console.** Add an Android app and an iOS app to your
+project. Both must use the bundle identifier the game actually ships with, which is
+`com.magnetmetro.game` in `capacitor.config.ts` — Firebase matches on it, and a mismatch fails
+silently by simply never reporting.
+
+**2. Download the two config files and put them exactly here:**
+
+| File | Destination |
+|---|---|
+| `google-services.json` | `android/app/google-services.json` |
+| `GoogleService-Info.plist` | `ios/App/App/GoogleService-Info.plist` |
+
+Android needs nothing else: `android/build.gradle` already carries the
+`com.google.gms:google-services` classpath, and `android/app/build.gradle` applies the plugin
+automatically *if and only if* it finds that JSON.
+
+**On iOS the plist must be added to the Xcode target, not just to the folder.** Open
+`ios/App/App.xcworkspace`, drag the file into the **App** group, and make sure the App target
+is ticked. A file Xcode does not know about is not in the app bundle and behaves exactly like a
+missing one — which brings us to the thing worth reading twice.
+
+**3. ⚠️ Add the files before your next device build, not before flipping the flag.**
+
+The iOS plugin calls `FirebaseApp.configure()` from its `load()`, and Capacitor runs `load()`
+for every registered plugin at app launch. That happens whether `USE_FIREBASE` is true or
+false — the flag only controls whether *events* are sent. So from the moment the plugin is
+installed, **an iOS build without a bundled `GoogleService-Info.plist` crashes on startup.**
+
+Android is more forgiving: without the JSON the Google Services plugin is never applied and
+Firebase is simply never initialised, so nothing breaks until something asks it for an
+instance — which only `USE_FIREBASE` does.
+
+**4. `npm run sync`, set `USE_FIREBASE = true` in `src/analytics/config.ts`, and build.**
+
+**5. Confirm it is actually arriving.** In the Firebase console, open **Analytics → DebugView**
+and run the app with debug mode on (`adb shell setprop debug.firebase.analytics.app
+com.magnetmetro.game` on Android, or the `-FIRDebugEnabled` launch argument in Xcode). Events
+should appear within seconds. Ordinary reports take up to 24 hours, so DebugView is the only
+way to know quickly that you wired it correctly rather than that nobody has played yet.
+
+Nothing needs adding to `AppDelegate.swift`: the plugin configures Firebase itself.
 
 **Or own the raw data.** Set `ANALYTICS_ENDPOINT` to any HTTPS URL that accepts a JSON POST —
 a Cloudflare Worker, a Google Apps Script writing to a spreadsheet, a small server. Events are

@@ -22,9 +22,26 @@ export const SHARE_BASE_URL: string = "";
 export const ANALYTICS_ENDPOINT: string = "";
 
 /**
- * Send to Firebase Analytics. Requires:
- *   npm install @capacitor-firebase/analytics firebase
- * plus google-services.json and GoogleService-Info.plist from your Firebase project, then
- * `npm run sync`. Has no effect on the web build.
+ * Send to Firebase Analytics. Has no effect on the web build — the sink checks for a native
+ * platform and gives up immediately in a browser.
+ *
+ * The plugin is installed and both native projects are synced. What is left is the pair of
+ * config files only your Firebase project can produce:
+ *
+ *   android/app/google-services.json       (Firebase console -> Android app -> download)
+ *   ios/App/App/GoogleService-Info.plist   (Firebase console -> iOS app -> download)
+ *
+ * Then `npm run sync`, and flip this to true.
+ *
+ * ORDER MATTERS, AND NOT IN THE USUAL WAY. On iOS the plugin calls FirebaseApp.configure()
+ * from its load(), which runs at app launch for every registered Capacitor plugin — *not*
+ * when this flag is read. So once the plugin is installed, a missing GoogleService-Info.plist
+ * crashes the app on startup whether this is true or false. Add the files before the next
+ * device build, not before flipping the flag.
+ *
+ * On iOS the plist must also be added to the Xcode target, not merely dropped in the folder:
+ * open ios/App/App.xcworkspace, drag it into the App group, and tick "Copy items if needed"
+ * with the App target checked. A file sitting beside the project that Xcode does not know
+ * about is not in the bundle, and behaves exactly like a missing one.
  */
 export const USE_FIREBASE = false;
