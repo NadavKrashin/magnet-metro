@@ -19,8 +19,21 @@ function check(name: string, condition: boolean, detail = ""): void {
   }
 }
 
-function hazard(polarity: Polarity, r: number, press = false): Hazard {
-  return { x: 0, y: 8, r, vx: 0, vy: 0, polarity, kind: "mine", driftAmp: 0, driftPhase: 0, absorbed: false, press };
+function hazard(polarity: Polarity, r: number, press = false, gate = false): Hazard {
+  return {
+    x: 0,
+    y: 8,
+    r,
+    vx: 0,
+    vy: 0,
+    polarity,
+    kind: "mine",
+    driftAmp: 0,
+    driftPhase: 0,
+    absorbed: false,
+    press,
+    gate,
+  };
 }
 
 /** Hold the drone still so the hazard is drawn onto it, isolating the collision outcome. */
@@ -64,6 +77,13 @@ for (const [label, colour] of [["blue", 1], ["red", -1]] as const) {
     pressSame.integrity === 3 && pressSame.stats.absorbed === 1,
     `integrity ${pressSame.integrity}`,
   );
+
+  const gateSame = meet(colour, hazard(colour, 3.1, false, true));
+  check(
+    `${label} drone eats a matching gate block without damage`,
+    gateSame.integrity === 3 && gateSame.stats.absorbed === 1 && gateSame.stats.gatesEaten === 1,
+    `integrity ${gateSame.integrity}, gatesEaten ${gateSame.stats.gatesEaten}`,
+  );
 }
 
 // And the other half: the press must cost haul, never a life.
@@ -85,6 +105,48 @@ for (let i = 0; i < 90; i++) {
   w.player.y = y0;
 }
 check("mismatched press costs haul, not a cell", w.integrity === 3 && w.chain.length < 12, `integrity ${w.integrity}, chain ${w.chain.length}`);
+
+/**
+ * The property the entire gate design rests on. Gates exist to make camping uncomfortable,
+ * and the moment one can cost a cell they raise the floor a beginner has to clear rather than
+ * the ceiling a skilled player plays against — which is exactly the failure that a lethal
+ * Press produced, taking naive completion from 50% to zero.
+ */
+const g = new World(7, { anchors: false, charged: true });
+g.setViewHeight(142);
+g.field.radius = 22;
+g.field.strength = 420;
+g.scrap.length = 0;
+g.hazards.length = 0;
+for (let i = 0; i < 20; i++) g.chain.push({ x: 0, y: 0, r: 1.35, polarity: 1, value: 10 });
+g.combo = 40;
+const gateBlock = hazard(-1, 3.1, false, true);
+gateBlock.y = 3;
+g.hazards.push(gateBlock);
+// Held for less than the invulnerability window, so this measures one crossing. A real drone
+// always moves forward through a one-row gate; only a test can loiter inside one.
+const gy0 = g.player.y;
+for (let i = 0; i < 40; i++) {
+  g.field.polarity = 1;
+  g.step(DT);
+  g.player.y = gy0;
+}
+check(
+  "a mismatched gate never costs a cell",
+  g.integrity === 3 && g.stats.hits === 0,
+  `integrity ${g.integrity}, hits ${g.stats.hits}`,
+);
+check(
+  "a mismatched gate resets the multiplier",
+  g.combo === 0 && g.multiplier === 1,
+  `combo ${g.combo}, multiplier ${g.multiplier}`,
+);
+check(
+  "a mismatched gate scatters part of the tail, not all of it",
+  g.chain.length < 20 && g.chain.length > 8,
+  `chain ${g.chain.length} of 20`,
+);
+check("a mismatched gate is counted", g.stats.gatesCrashed === 1, `${g.stats.gatesCrashed}`);
 
 console.log(failures === 0 ? "\nAll hazard checks passed." : `\n${failures} check(s) failed.`);
 process.exit(failures === 0 ? 0 : 1);

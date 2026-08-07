@@ -14,6 +14,7 @@ import {
   baseModifiers,
   describeObjective,
   levelPassed,
+  scrapFromScore,
   worldById,
   type LevelDef,
   type Modifiers,
@@ -55,6 +56,7 @@ function play(level: LevelDef, mods: Modifiers) {
   }
   return {
     score: world.score,
+    banked: scrapFromScore(world.score, false),
     won: world.phase === "won",
     absorbed: world.stats.absorbed,
     pressEaten: world.stats.pressEaten,

@@ -155,6 +155,7 @@ export class Renderer implements View {
     // darker colour instead of one simply hiding the other.
     ctx.save();
     ctx.globalCompositeOperation = "multiply";
+    this.drawRecordLine(world);
     this.drawAnchors(world);
     this.drawScrap(world);
     this.drawHazards(world);
@@ -405,6 +406,53 @@ export class Renderer implements View {
     }
   }
 
+  /**
+   * The player's own furthest distance, printed across the track as a finishing rule.
+   *
+   * This is the endless mode's only finish line, and the point is that it is *visible on the
+   * approach*: ten seconds of watching your own record come towards you is what makes
+   * crossing it feel like anything. Once it is behind you it stays drawn, so the run has a
+   * marker showing how far past your best you are.
+   */
+  private drawRecordLine(world: World): void {
+    if (world.recordLine <= 0) return;
+    const y = this.toScreenY(world.recordLine);
+    if (y < -60 || y > this.ch + 60) return;
+
+    const ctx = this.ctx;
+    const left = this.cw / 2 - TRACK_HALF * this.scale;
+    const right = this.cw / 2 + TRACK_HALF * this.scale;
+    const beaten = world.recordBeaten;
+
+    ctx.save();
+    ctx.strokeStyle = beaten ? ink.blue : ink.key;
+    ctx.globalAlpha = beaten ? 0.5 : 0.8;
+    ctx.lineWidth = Math.max(2, this.scale * 0.3);
+    ctx.setLineDash([this.scale * 1.6, this.scale * 1.1]);
+    ctx.beginPath();
+    ctx.moveTo(left, y);
+    ctx.lineTo(right, y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    const label = beaten ? "YOUR RECORD" : "YOUR BEST";
+    const size = Math.round(this.scale * 2.1);
+    // Held back until the rule is clear of the score and the hull pips. The line itself is
+    // the signal; a caption fighting the HUD for the top of the screen is just noise.
+    if (size >= 7 && y > this.ch * 0.17) {
+      // Below the rule, always: the line scrolls in from the top of the screen, and a caption
+      // above it would be clipped off during the entire approach — which is the only stretch
+      // where the caption has a job to do.
+      ctx.font = `900 ${size}px "Anton", Impact, "Haettenschweiler", "Arial Narrow", system-ui, sans-serif`;
+      ctx.textAlign = "left";
+      ctx.textBaseline = "top";
+      ctx.globalAlpha = beaten ? 0.55 : 0.9;
+      ctx.fillStyle = beaten ? ink.blue : ink.key;
+      ctx.fillText(label, left + this.scale * 1.2, y + this.scale * 0.6);
+    }
+    ctx.restore();
+  }
+
   private drawAnchors(world: World): void {
     for (const a of world.anchors) {
       const x = this.toScreenX(a.x);
@@ -475,7 +523,7 @@ export class Renderer implements View {
     const ctx = this.ctx;
     ctx.save();
     ctx.textAlign = "center";
-    ctx.font = `900 ${Math.round(this.scale * 3.4)}px Impact, "Haettenschweiler", "Arial Narrow", system-ui, sans-serif`;
+    ctx.font = `900 ${Math.round(this.scale * 3.4)}px "Anton", Impact, "Haettenschweiler", "Arial Narrow", system-ui, sans-serif`;
     ctx.lineJoin = "round";
     for (const f of world.floats) {
       const t = f.life / f.maxLife;

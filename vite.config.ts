@@ -7,7 +7,9 @@ export default defineConfig({
   build: {
     outDir: "dist",
     target: "es2020",
-    assetsInlineLimit: 8192,
+    // High enough that the bundled display font becomes a data: URI inside the CSS, which is
+    // what keeps scripts/inline.mjs able to produce one genuinely self-contained HTML file.
+    assetsInlineLimit: 32768,
   },
   server: {
     host: true,

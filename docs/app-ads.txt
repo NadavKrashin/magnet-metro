@@ -1,0 +1,27 @@
+# app-ads.txt for Magnet Metro
+#
+# WHAT THIS IS
+# An IAB authorised-sellers file. It tells ad exchanges which companies are allowed to sell
+# this app's inventory. Without it a large share of programmatic demand will simply not bid,
+# which costs real money — this is one of the cheapest revenue improvements available.
+#
+# BEFORE THIS WORKS, THREE THINGS MUST ALL BE TRUE
+#
+# 1. Replace pub-0000000000000000 below with your own AdMob publisher ID.
+#    Find it in AdMob under Settings -> Account information. It looks like
+#    pub-1234567890123456.
+#
+# 2. This file must be reachable at the ROOT of the developer website you list in your
+#    store entries — https://yourdomain/app-ads.txt — not in a subdirectory.
+#    NOTE: if you serve this repository's docs/ folder via GitHub Pages on a project site,
+#    the file lands at https://<user>.github.io/<repo>/app-ads.txt, which is a subdirectory
+#    and WILL NOT be found. Either use a custom domain, publish to a <user>.github.io user
+#    site, or host this single file at the root of whatever domain you name in the stores.
+#
+# 3. The developer website field in BOTH consoles (Play Console and App Store Connect) must
+#    point at that exact domain. Google crawls the domain it finds there.
+#
+# Verification appears in AdMob under Settings -> app-ads.txt, usually within 24-48 hours of
+# the store listing going live. It cannot be verified before the app is published.
+
+google.com, pub-0000000000000000, DIRECT, f08c47fec0942fa0

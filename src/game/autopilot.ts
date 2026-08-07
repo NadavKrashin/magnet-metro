@@ -98,6 +98,16 @@ function preferredPolarity(world: World): Polarity {
     else red += 60;
   }
 
+  // A gate cannot be steered around, so matching it outranks anything a skilled player could
+  // pick up by staying put — but it must not outrank the Press, which is worth four rows.
+  if (world.gatePolarity !== 0 && world.gateHeadY >= 0) {
+    const dy = world.gateHeadY - p.y;
+    if (dy > -4 && dy < 60) {
+      if (world.gatePolarity === 1) blue += 34;
+      else red += 34;
+    }
+  }
+
   if (blue === 0 && red === 0) return 0;
   return blue >= red ? 1 : -1;
 }

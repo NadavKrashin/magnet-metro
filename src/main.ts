@@ -4,17 +4,22 @@ import { Loop } from "./core/loop";
 import { Rng, randomCode, seedFromCode } from "./core/rng";
 import { Renderer } from "./render/renderer";
 import { GameAudio } from "./audio/audio";
+import { haptics } from "./audio/haptics";
 import { autopilot, newAutopilotState, type AutopilotState } from "./game/autopilot";
 import { makeGrainTile } from "./render/texture";
-import { COURSE_LENGTH, OPENING_LENGTH, VIEW_WIDTH, World } from "./game/world";
+import { COURSE_LENGTH, OPENING_LENGTH, SCRAP_VALUE, VIEW_WIDTH, World } from "./game/world";
 import {
   EDITIONS,
   UPGRADES,
   LEVELS,
+  affordableUpgrade,
   WORLDS,
   contractById,
   dailyCode,
   earnedSeals,
+  settleDailyStreak,
+  streakAtRisk,
+  streakReward,
   levelsInWorld,
   worldById,
   worldComplete,
@@ -95,6 +100,8 @@ class Game {
   private ads = new AdsService(this.analytics);
   /** One rewarded continue per run, and one bonus per result. */
   private revivedThisRun = false;
+  /** True when the run on the results sheet ended by choice, not by destruction. */
+  private quitRun = false;
   /** Score of the run whose results are on screen, for the bonus and the share text. */
   private lastRunScore = 0;
   /** Whether the run on the results sheet was endless, for the rewarded bonus maths. */
@@ -121,6 +128,8 @@ class Game {
   private runs: RunRecord[] = loadRuns();
   private save: SaveData = loadSave();
   private shopTab: "upgrades" | "editions" = "upgrades";
+  /** Where Back should go from the workshop, so the results sheet is not lost on a price check. */
+  private shopReturn: "menu" | "results" = "menu";
   /** True when the current run is on today's shared course. */
   private isDaily = false;
   /** Index into LEVELS when playing the campaign, or -1 for a free run. */
@@ -198,6 +207,7 @@ class Game {
       });
       // Banked rather than binned: the player earned what is on the counter, and taking it
       // away for quitting is the kind of thing that makes people quit for good.
+      this.quitRun = true;
       this.endRun();
     });
 
@@ -220,8 +230,14 @@ class Game {
     el("btn-levels").addEventListener("click", () => this.showLevels());
     el("btn-levels-close").addEventListener("click", () => this.showMenu());
     el("btn-shop").addEventListener("click", () => this.showShop());
-    el("btn-shop-2").addEventListener("click", () => this.showShop());
-    el("btn-shop-close").addEventListener("click", () => this.showMenu());
+    // Opening the workshop from the results sheet has to be able to go back to it: the sheet
+    // still holds Share and the rewarded bonus, and a player who only wanted to check a price
+    // was losing both without ever choosing to.
+    el("btn-shop-2").addEventListener("click", () => this.showShop("results"));
+    el("btn-shop-close").addEventListener("click", () => {
+      if (this.shopReturn === "results") this.showResults();
+      else this.showMenu();
+    });
     el("tab-upgrades").addEventListener("click", () => this.setShopTab("upgrades"));
     el("tab-editions").addEventListener("click", () => this.setShopTab("editions"));
     el("btn-free").addEventListener("click", () => {
@@ -318,6 +334,9 @@ class Game {
 
   private applyMute(muted: boolean): void {
     this.audio.setMuted(muted);
+    // Somebody who silenced the game almost certainly wants it silent in the hand too —
+    // muting is usually about not being noticed, and a buzzing phone gives that away.
+    haptics.setEnabled(!muted);
     this.soundEl.textContent = muted ? "Sound off" : "Sound on";
     this.soundEl.classList.toggle("off", muted);
     try {
@@ -361,6 +380,9 @@ class Game {
       {
         ...this.active.worldOptions,
         endless: this.isEndless,
+        // Free Run only. A level, a daily or a shared course has to generate identically for
+        // everyone who plays it, so their opening never depends on the player's save.
+        shortOpening: this.isEndless && this.knowsTheRule(),
         // A world is the same generator run differently, so its character travels with the run.
         ...(wd
           ? {
@@ -368,6 +390,7 @@ class Game {
               spacingScale: wd.spacingScale,
               hazardBias: wd.hazardBias,
               midPresses: wd.midPresses,
+              colourGates: wd.colourGates ?? true,
             }
           : {}),
       },
@@ -380,6 +403,7 @@ class Game {
     this.state = "playing";
 
     this.revivedThisRun = false;
+    this.quitRun = false;
     this.autopilotState = newAutopilotState();
     this.analytics.noteRunStarted();
     const startingLevel = this.levelIndex >= 0 ? LEVELS[this.levelIndex] : undefined;
@@ -406,14 +430,44 @@ class Game {
     this.audio.startMusic();
     this.world.events = {
       onCollect: (comboIndex) => this.audio.collect(comboIndex),
-      onAbsorb: () => this.audio.absorb(),
-      onHit: () => this.audio.hit(),
-      onFlip: (toRed) => this.audio.flip(toRed),
+      onAbsorb: () => {
+        this.audio.absorb();
+        haptics.absorb();
+      },
+      onHit: (kind) => {
+        this.audio.hit();
+        if (kind === "press") haptics.pressCrash();
+        else haptics.hit();
+      },
+      onFlip: (toRed) => {
+        this.audio.flip(toRed);
+        haptics.flip();
+      },
+      onRecord: () => {
+        this.audio.record();
+        haptics.record();
+      },
     };
+
+    // Only Free Run has a record to break, and only once there is one. The line is drawn
+    // across the track and celebrated on the way through.
+    this.world.recordLine = this.isEndless ? Math.floor(this.save.endlessBest) : 0;
 
     this.menuEl.classList.add("hidden");
     this.resultsEl.classList.add("hidden");
     this.hud.classList.remove("hidden");
+  }
+
+  /**
+   * Whether this player has demonstrably learned the colour rule.
+   *
+   * The scripted lesson is eight seconds at the head of every run, and this genre's whole
+   * loop is measured in seconds — on run fifteen a quarter of the run is a classroom the
+   * player graduated from days ago. The same threshold the menu already uses to decide the
+   * campaign is worth offering, on the same reasoning.
+   */
+  private knowsTheRule(): boolean {
+    return this.save.runs >= 3 || this.save.levelsDone > 0;
   }
 
   /** A continue is only worth offering on a real loss, deep enough in, once per run. */
@@ -430,7 +484,11 @@ class Game {
     this.state = "revive";
     this.audio.stopMusic();
     el("revive-score").textContent = this.world.score.toLocaleString();
-    el("revive-note").textContent = `You are ${Math.round(this.world.progress * 100)}% through. Watch a short ad to carry on with the ${this.world.chain.length} pieces you are holding.`;
+    // An endless run has no course to be a percentage of, so the offer talks in distance.
+    const depth = this.isEndless
+      ? `You are ${Math.floor(this.world.player.y).toLocaleString()} m in`
+      : `You are ${Math.round(this.world.progress * 100)}% through`;
+    el("revive-note").textContent = `${depth}. Watch a short ad to carry on with the ${this.world.chain.length} pieces you are holding.`;
     this.hud.classList.add("hidden");
     this.reviveEl.classList.remove("hidden");
     this.analytics.track("rewarded_offered", { placement: "revive" });
@@ -462,13 +520,11 @@ class Game {
     saveSave(this.save);
     this.analytics.track("currency_earned", { amount: bonus, source: "rewarded_double" });
     // The stats table already shows a total; it has to move when the bonus lands, or the
-    // sheet is stale in exactly the way that caused the confusion in the first place.
-    const rows = el("result-stats");
-    const totalRow = Array.from(rows.querySelectorAll("tr")).at(-1);
-    if (totalRow) {
-      const cell = totalRow.querySelector("td:last-child");
-      if (cell) cell.textContent = this.save.scrap.toLocaleString();
-    }
+    // sheet is stale in exactly the way that caused the confusion in the first place. Looked
+    // up by id: on bounded runs the bank is not the last row, and updating "whatever is
+    // last" was overwriting "Course reached" with the bank balance.
+    const bankCell = document.getElementById("result-bank");
+    if (bankCell) bankCell.textContent = this.save.scrap.toLocaleString();
     el<HTMLButtonElement>("btn-double").disabled = true;
     el("result-goal").innerHTML = `<b>+${bonus.toLocaleString()} scrap</b> added. Banked: ${this.save.scrap.toLocaleString()}.`;
     this.audio.unlock();
@@ -632,9 +688,20 @@ class Game {
 
     const today = dailyCode();
     const done = this.save.dailyDate === today;
+    const streak = this.save.dailyStreak;
+    const atRisk = streakAtRisk(this.save, today);
+    // The streak is the reason to come back, so it is what the button says — and when it is
+    // one day from lapsing, saying so is the entire point of having one.
     el("daily-note").textContent = done
-      ? `Your best today: ${this.save.dailyBest.toLocaleString()}`
-      : "Same course for everyone, once a day";
+      ? streak > 1
+        ? `Day ${streak} · best today ${this.save.dailyBest.toLocaleString()}`
+        : `Your best today: ${this.save.dailyBest.toLocaleString()}`
+      : atRisk
+        ? `Day ${streak} streak — play today to keep it`
+        : streak > 1
+          ? `Longest streak: ${this.save.dailyStreakBest} days`
+          : "Same course for everyone, once a day";
+    el("btn-daily").classList.toggle("nudge", atRisk);
 
     this.shopEl.classList.add("hidden");
     this.hud.classList.add("hidden");
@@ -677,6 +744,9 @@ class Game {
     credits.push({ label: this.isEndless ? "Distance haul" : "Run haul", amount: banked });
     this.save.runs += 1;
 
+    // The record the run was played against, before this run moves it. A record only means
+    // something measured against a past, so the first run ever is a distance, not a "record".
+    const prevEndlessBest = this.save.endlessBest;
     if (this.isEndless) {
       const reached = Math.floor(w.player.y);
       if (reached > this.save.endlessBest) {
@@ -686,12 +756,30 @@ class Game {
     }
 
     const today = dailyCode();
+    let streak = 0;
+    let streakBroken = false;
     if (this.isDaily) {
       if (this.save.dailyDate !== today) {
         this.save.dailyDate = today;
         this.save.dailyBest = 0;
       }
       this.save.dailyBest = Math.max(this.save.dailyBest, record.score);
+
+      // Once per calendar day, whatever the score. Turning up is the whole ask.
+      const settled = settleDailyStreak(this.save, today);
+      streak = settled.streak;
+      streakBroken = settled.broken;
+      if (settled.advanced) {
+        const bonus = streakReward(settled.streak);
+        this.save.scrap += bonus;
+        credits.push({ label: `Day ${settled.streak} streak`, amount: bonus });
+        this.analytics.track("currency_earned", { amount: bonus, source: "daily_streak" });
+        this.analytics.track("daily_streak", {
+          streak: settled.streak,
+          broken: settled.broken,
+          best: this.save.dailyStreakBest,
+        });
+      }
     }
 
     // Campaign outcome, settled before the results sheet is written so the copy can lead with
@@ -702,6 +790,7 @@ class Game {
     if (level) {
       const passed = levelPassed(level, {
         score: record.score,
+        banked,
         won: record.won,
         absorbed: w.stats.absorbed,
         pressEaten: w.stats.pressEaten,
@@ -729,7 +818,8 @@ class Game {
     }
 
     const contractCredits = settleContracts(this.save, {
-      score: banked,
+      score: record.score,
+      banked,
       won: record.won,
       absorbed: w.stats.absorbed,
       pressEaten: w.stats.pressEaten,
@@ -746,7 +836,8 @@ class Game {
     const priorBest = prior.length ? Math.max(...prior.map((r) => r.score)) : 0;
 
     const endlessDistance = Math.floor(w.player.y);
-    const endlessRecord = this.isEndless && endlessDistance >= this.save.endlessBest;
+    const endlessRecord = this.isEndless && prevEndlessBest > 0 && endlessDistance > prevEndlessBest;
+    const endlessFirst = this.isEndless && prevEndlessBest === 0;
     el("result-title").textContent = level
       ? levelCleared
         ? `Level ${level.n} complete`
@@ -759,7 +850,9 @@ class Game {
           ? this.isDaily
             ? "Today's run — cleared"
             : "Course cleared"
-          : "Drone destroyed";
+          : this.quitRun
+            ? "Banked early"
+            : "Drone destroyed";
     el("result-score").textContent = String(record.score);
     el("result-best").textContent =
       record.score > priorBest && prior.length > 0
@@ -770,18 +863,42 @@ class Game {
 
     const total = record.collected + record.missed;
     const pickup = total > 0 ? Math.round((record.collected / total) * 100) : 0;
+
+    // How much of the course went past uncollectable because of the colour the player was.
+    // Expressed against everything they actually banked plus everything they could not touch,
+    // so it reads as "the share of this run you locked yourself out of".
+    const reachableValue = record.score > 0 ? w.stats.collected * SCRAP_VALUE : 0;
+    const lockedOut = w.stats.missedWrongColour;
+    const missedShare =
+      reachableValue + lockedOut > 0
+        ? Math.round((lockedOut / (reachableValue + lockedOut)) * 100)
+        : 0;
+    const gatesMet = w.stats.gatesEaten + w.stats.gatesCrashed;
     const rows: [string, string][] = [
       ["Scrap collected", String(record.collected)],
       ["Pickup rate", `${pickup}%`],
       ["Best combo", String(record.maxCombo)],
       ["Hits taken", String(record.hits)],
-      ["Thumb actions", String(record.actions)],
+      // Named for what it actually is. "Thumb actions" measured colour changes and read as a
+      // generic input count, which told the player nothing about the decision it represents.
+      ["Colour changes", String(record.actions)],
       ["Time", `${record.duration.toFixed(1)}s`],
       ...(this.isEndless
         ? ([["Distance", `${endlessDistance.toLocaleString()} m`],
             ["Furthest ever", `${Math.floor(this.save.endlessBest).toLocaleString()} m`]] as [string, string][])
         : []),
       ["Mines swallowed", String(w.stats.absorbed)],
+      // The cost of the colour you were. Left off the sheet entirely until now, which meant
+      // the single biggest argument for using the game's only verb was invisible.
+      ...(missedShare > 0
+        ? ([["Left behind — wrong colour", `${missedShare}%`]] as [string, string][])
+        : []),
+      ...(w.stats.gatesCrashed > 0 || w.stats.gatesEaten > 0
+        ? ([["Gates matched", `${w.stats.gatesEaten} of ${gatesMet}`]] as [string, string][])
+        : []),
+      ...(this.isDaily && streak > 0
+        ? ([["Daily streak", `${streak} day${streak === 1 ? "" : "s"}`]] as [string, string][])
+        : []),
       ...credits.map((c) => [c.label, `+${c.amount.toLocaleString()}`] as [string, string]),
       ["Total in the bank", this.save.scrap.toLocaleString()],
       ...(this.isEndless
@@ -789,18 +906,62 @@ class Game {
         : ([["Course reached", `${Math.round((Math.min(this.world.player.y, COURSE_LENGTH) / COURSE_LENGTH) * 100)}%`]] as [string, string][])),
     ];
     el("result-stats").innerHTML = rows
-      .map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`)
+      .map(([k, v]) =>
+        k === "Total in the bank"
+          ? `<tr><td>${k}</td><td id="result-bank">${v}</td></tr>`
+          : `<tr><td>${k}</td><td>${v}</td></tr>`,
+      )
       .join("");
 
     // The concrete next thing, named, with the gap. "Come back tomorrow" is not a reason to
     // return; "1,400 more and the coil gets wider" is.
     const goal = nextGoal(this.save);
+    // A streak is the strongest reason this game has to be opened tomorrow, so on the sheet
+    // that just extended one it outranks everything except finishing a world.
+    const streakLine =
+      streak > 0
+        ? streakBroken && streak === 1
+          ? "<b>Streak restarted — day 1.</b> Come back tomorrow to make it two."
+          : streak === 1
+            ? "<b>Day 1.</b> Play tomorrow's course to start a streak."
+            : `<b>${streak} days in a row.</b> Miss tomorrow and it goes back to one.`
+        : "";
+
+    // Something affordable in the workshop right now is news, and it is the whole reason the
+    // opening price was cut — a sheet that only ever says "16 m short of your record" never
+    // tells the player the meta exists, and the first purchase is where it hooks. It appends
+    // rather than replaces: the record chase is still the reason to press Run Again.
+    const buyable = affordableUpgrade(this.save);
+    const affordableLine =
+      buyable && !(goal && goal.kind === "upgrade" && goal.remaining === 0)
+        ? `<br><span class="goal-second">${buyable.label} is affordable — spend it in the workshop.</span>`
+        : "";
+
+    // Somebody who left a third of the course behind is playing one colour, and the number on
+    // its own does not tell them what to do about it. This is the only place the game ever
+    // says the quiet part: the other half of the course was always available.
+    const colourTime = w.stats.timeBlue + w.stats.timeRed;
+    const onOneColour =
+      colourTime > 0 ? Math.max(w.stats.timeBlue, w.stats.timeRed) / colourTime : 0;
+    const campingLine =
+      onOneColour >= 0.85 && missedShare >= 33 && w.player.y > OPENING_LENGTH
+        ? `<br><span class="goal-second">You spent ${Math.round(onOneColour * 100)}% of that run on one colour. The other half was there for the taking.</span>`
+        : "";
+
+    // At most one nudge. Two red lines under a headline is a lecture, not a prompt.
+    const affordable = campingLine || affordableLine;
+
     el("result-goal").innerHTML = sealEarned
       ? `<b>${worldById(level!.world).name} complete.</b> ${sealEarned} earned — it cannot be bought.`
+      : streakLine
+      ? streakLine + affordable
       : this.isEndless
-      ? endlessRecord
-        ? "<b>Furthest you have ever been.</b> It only gets faster from here."
-        : `<b>${(this.save.endlessBest - endlessDistance).toLocaleString()} m short</b> of your record.`
+      ? (endlessFirst
+          ? `<b>${endlessDistance.toLocaleString()} m banked.</b> That is now the record to beat.`
+          : endlessRecord
+            ? "<b>Furthest you have ever been.</b> It only gets faster from here."
+            : `<b>${(this.save.endlessBest - endlessDistance).toLocaleString()} m short</b> of your record.`) +
+        affordable
       : levelCleared
       ? `<b>+${level!.reward.toLocaleString()} scrap.</b>${level!.unlockEdition ? ` The ${level!.unlockEdition} edition is yours — equip it in the workshop.` : " Next level unlocked."}`
       : level
@@ -808,9 +969,13 @@ class Game {
         : completed.length
       ? `<b>Contract complete.</b><br>${completed.join("<br>")}`
       : goal
-      ? goal.remaining === 0
-        ? `<b>${goal.label}.</b> Spend it in the workshop.`
-        : `<b>${goal.remaining.toLocaleString()} more scrap</b> unlocks ${goal.label}.`
+      ? goal.kind === "level"
+        ? `<b>Next up: ${goal.label}.</b>${affordable}`
+        : goal.kind === "contract"
+          ? `<b>Nearly there:</b> ${goal.label}.${affordable}`
+          : goal.remaining === 0
+            ? `<b>${goal.label} is affordable now.</b> Spend it in the workshop.`
+            : `<b>${goal.remaining.toLocaleString()} more scrap</b> unlocks ${goal.label}.${affordable}`
       : "<b>Everything is bought.</b> Nothing left but a better score.";
 
     el("compare").innerHTML = this.personalSummary();
@@ -841,7 +1006,11 @@ class Game {
     });
 
     // The two milestones that decide whether a new player ever comes back at all.
-    if (w.player.y >= OPENING_LENGTH) this.analytics.track("tutorial_completed", {});
+    // Only the full lesson counts: a warm-up nobody was being taught by is not a tutorial
+    // completion, and counting it would flatter the one funnel metric that has to stay honest.
+    if (!w.options.shortOpening && w.player.y >= OPENING_LENGTH) {
+      this.analytics.track("tutorial_completed", {});
+    }
     if (record.won && this.save.runs === 1) this.analytics.track("first_run_completed", {});
     if (levelCleared && level) {
       this.analytics.track("level_cleared", {
@@ -857,15 +1026,31 @@ class Game {
 
     // Only once the results are already on screen, and only if pacing allows. Never between a
     // tap and the thing the tap was for.
-    void this.ads.maybeShowInterstitial(this.save.runs);
+    //
+    // And never on a sheet that is offering the rewarded bonus. A player reaching for "Double
+    // it" would otherwise be served an interstitial first and watch two ads back to back —
+    // the cheaper one teaching them to resent the sheet that the better one lives on. The
+    // rewarded placement pays more and buys goodwill instead of spending it, so it wins.
+    if (doubleBtn.disabled) void this.ads.maybeShowInterstitial(this.save.runs);
+    else this.analytics.track("interstitial_eligible", { shown: false, reason: "rewarded_offered" });
   }
 
   // -------------------------------------------------------------------------
   // Workshop
   // -------------------------------------------------------------------------
 
-  private showShop(): void {
+  /** Put the results sheet back exactly as it was, bonus and share state included. */
+  private showResults(): void {
+    this.state = "results";
+    this.shopEl.classList.add("hidden");
+    this.menuEl.classList.add("hidden");
+    this.hud.classList.add("hidden");
+    this.resultsEl.classList.remove("hidden");
+  }
+
+  private showShop(from: "menu" | "results" = "menu"): void {
     this.state = "shop";
+    this.shopReturn = from;
     this.menuEl.classList.add("hidden");
     this.resultsEl.classList.add("hidden");
     this.hud.classList.add("hidden");
@@ -1041,7 +1226,10 @@ class Game {
       const best = Math.max(this.save.endlessBest, 400);
       const frac = Math.min(1, w.player.y / best);
       this.progressEl.style.width = `${frac * 100}%`;
-      this.progressEl.classList.toggle("record", w.player.y > this.save.endlessBest);
+      this.progressEl.classList.toggle(
+        "record",
+        this.save.endlessBest > 0 && w.player.y > this.save.endlessBest,
+      );
     } else {
       this.progressEl.style.width = `${w.progress * 100}%`;
       this.progressEl.classList.remove("record");
@@ -1060,11 +1248,15 @@ class Game {
     this.objectiveEl.classList.toggle("hidden", !level && !this.isEndless);
     if (this.isEndless) {
       const m = Math.floor(w.player.y);
-      const beat = w.player.y > this.save.endlessBest;
-      el("objective-text").textContent = beat ? "NEW RECORD" : "BEST";
-      el("objective-progress").textContent = beat
-        ? `${m.toLocaleString()} m`
-        : `${m.toLocaleString()} / ${Math.floor(this.save.endlessBest).toLocaleString()} m`;
+      // A record needs a past. On the very first run there is nothing to beat yet, so the
+      // readout is plain distance — NEW RECORD from metre one would make the words worthless.
+      const hasBest = this.save.endlessBest > 0;
+      const beat = hasBest && w.player.y > this.save.endlessBest;
+      el("objective-text").textContent = beat ? "NEW RECORD" : hasBest ? "BEST" : "DISTANCE";
+      el("objective-progress").textContent =
+        beat || !hasBest
+          ? `${m.toLocaleString()} m`
+          : `${m.toLocaleString()} / ${Math.floor(this.save.endlessBest).toLocaleString()} m`;
       this.objectiveEl.classList.toggle("done", beat);
     } else if (level) {
       const prog = objectiveProgress(level, {

@@ -77,6 +77,17 @@ export interface UpgradeDef {
   blurb: string;
   maxLevel: number;
   baseCost: number;
+  /**
+   * Price of the very first pip, when it should not be `baseCost`.
+   *
+   * The first purchase is the moment the meta actually hooks: the player learns that a run
+   * makes them permanently stronger, and wants another one for that reason rather than for
+   * the score. A measured naive first run banks a little over a hundred scrap, so a 1,200
+   * opening price puts that moment five to ten runs away — most likely in a session that
+   * never happens. One cheap pip brings it inside the first sitting; the curve past it is
+   * untouched, so the long tail the shop is built around is unchanged.
+   */
+  introCost?: number;
   /** Human-readable effect of owning `level`. */
   describe(level: number): string;
   apply(mods: Modifiers, level: number): void;
@@ -89,6 +100,9 @@ export const UPGRADES: UpgradeDef[] = [
     blurb: "Widens the magnet.",
     maxLevel: 5,
     baseCost: 1200,
+    // The first thing anyone should own, and the most legible: a wider magnet is visible in
+    // the first second of the next run.
+    introCost: 400,
     describe: (l) => `Reach ${22 + l * 3}`,
     apply: (m, l) => {
       m.fieldRadiusBonus += l * 3;
@@ -142,6 +156,7 @@ export const UPGRADES: UpgradeDef[] = [
 
 /** Costs climb steeply so a maxed track is a genuine goal rather than an afternoon. */
 export function upgradeCost(def: UpgradeDef, currentLevel: number): number {
+  if (currentLevel === 0 && def.introCost !== undefined) return def.introCost;
   return Math.round(def.baseCost * Math.pow(2.3, currentLevel));
 }
 
@@ -243,8 +258,68 @@ export function dailyCode(now: Date = new Date()): string {
   return `DAILY-${y}${m}${d}`;
 }
 
+const DAY_MS = 86_400_000;
+
+/** The calendar day a daily code refers to, or null if it is not one (including ""). */
+export function dateFromDailyCode(code: string): Date | null {
+  const m = /^DAILY-(\d{4})(\d{2})(\d{2})$/.exec(code);
+  if (!m) return null;
+  return new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+}
+
+/** True when the streak is still alive but today has not been played yet. */
+export function streakAtRisk(save: SaveData, today = dailyCode()): boolean {
+  if (save.dailyStreak <= 0 || save.dailyStreakDate === today) return false;
+  const last = dateFromDailyCode(save.dailyStreakDate);
+  const now = dateFromDailyCode(today);
+  return !!last && !!now && now.getTime() - last.getTime() === DAY_MS;
+}
+
+/**
+ * Streak bonus for the first daily run of a day. Capped: an unbroken habit should be worth
+ * having, and a two-month streak should not out-earn actually playing well.
+ */
+export function streakReward(streak: number): number {
+  return 250 * Math.min(streak, 7);
+}
+
+/**
+ * Advance the daily streak, once per calendar day.
+ *
+ * A daily course with nothing accumulating across days gives a player no reason to notice
+ * they missed one — this is the cheapest comeback mechanic the genre has, and it needs no
+ * server because the save already knows what day it last played.
+ */
+export function settleDailyStreak(
+  save: SaveData,
+  today = dailyCode(),
+): { streak: number; advanced: boolean; broken: boolean } {
+  if (save.dailyStreakDate === today) {
+    // Replaying today's course is allowed, but it cannot pay the streak twice.
+    return { streak: save.dailyStreak, advanced: false, broken: false };
+  }
+
+  const last = dateFromDailyCode(save.dailyStreakDate);
+  const now = dateFromDailyCode(today);
+  const consecutive = !!last && !!now && now.getTime() - last.getTime() === DAY_MS;
+  const broken = save.dailyStreak > 0 && !consecutive;
+
+  save.dailyStreak = consecutive ? save.dailyStreak + 1 : 1;
+  save.dailyStreakDate = today;
+  if (save.dailyStreak > save.dailyStreakBest) save.dailyStreakBest = save.dailyStreak;
+  return { streak: save.dailyStreak, advanced: true, broken };
+}
+
 export interface RunSummary {
+  /** The number the player saw on screen. */
   score: number;
+  /**
+   * Scrap actually banked from this run, which is a tenth of the score and tapered on long
+   * endless runs. Kept as its own field because the two were previously both passed as
+   * `score` to different consumers — correct for the contracts that existed, and a trap for
+   * the next one anybody writes.
+   */
+  banked: number;
   won: boolean;
   absorbed: number;
   pressEaten: number;
@@ -264,11 +339,29 @@ export interface ContractDef {
   text: string;
   target: number;
   reward: number;
+  /**
+   * A one-off given to brand new players and never drawn again. The standing contracts are
+   * sized for somebody who already plays well; a beginner is thousands of scrap away from
+   * any of them, which leaves their first session with nothing to actually finish.
+   */
+  starter?: boolean;
   /** How much this run advanced the contract. */
   measure(r: RunSummary): number;
 }
 
 export const CONTRACTS: ContractDef[] = [
+  {
+    // Deliberately something a first-timer does by accident: the scripted lesson alone feeds
+    // them several mines in their own colour. Two ordinary runs finish it, and the payout
+    // plus those runs' own haul clears the opening Coil with change to spare — so the first
+    // upgrade lands inside the first sitting rather than in a session that may never happen.
+    id: "starter",
+    text: "Swallow 8 mines in your own colour",
+    target: 8,
+    reward: 600,
+    starter: true,
+    measure: (r) => r.absorbed,
+  },
   {
     id: "swallow",
     text: "Swallow mines in your own colour",
@@ -281,7 +374,7 @@ export const CONTRACTS: ContractDef[] = [
     text: "Bank scrap",
     target: 8000,
     reward: 4000,
-    measure: (r) => r.score,
+    measure: (r) => r.banked,
   },
   {
     id: "finish",
@@ -364,7 +457,9 @@ export function contractById(id: string): ContractDef | undefined {
 export function refillContracts(active: ActiveContract[]): ActiveContract[] {
   const out = active.filter((a) => contractById(a.id));
   const taken = new Set(out.map((a) => a.id));
-  const pool = CONTRACTS.filter((c) => !taken.has(c.id));
+  // The starter is handed out once, by emptySave, and never drawn again — a veteran being
+  // asked to swallow eight mines is not a contract, it is a formality.
+  const pool = CONTRACTS.filter((c) => !taken.has(c.id) && !c.starter);
   while (out.length < 3 && pool.length > 0) {
     const pick = pool.splice(Math.floor(Math.random() * pool.length), 1)[0]!;
     out.push({ id: pick.id, progress: 0 });
@@ -408,6 +503,13 @@ export interface WorldDef {
   spacingScale?: number;
   hazardBias?: number;
   midPresses?: number;
+  /**
+   * Whether courses in this world carry colour gates. Off only in the opening world, whose
+   * job is to be clearable while the rule is still being learned — a wall that cannot be
+   * steered around is the right pressure on somebody who understands the tap, and the wrong
+   * one on somebody still working out what it does.
+   */
+  colourGates?: boolean;
   /** Awarded for clearing every level in the world. Cannot be bought. */
   seal: string;
 }
@@ -417,6 +519,7 @@ export const WORLDS: WorldDef[] = [
     id: "proof",
     name: "Proof Sheet",
     blurb: "The first run off the press. Clean stock, room to think.",
+    colourGates: false,
     seal: "Proof Mark",
   },
   {
@@ -481,7 +584,10 @@ export const LEVELS: LevelDef[] = [
   // Night Shift — everything arrives sooner.
   { n: 7, world: "nightshift", seed: "LVL-0007", kind: "finish", target: 1, reward: 1200 },
   { n: 8, world: "nightshift", seed: "LVL-0008", kind: "combo", target: 120, reward: 1500 },
-  { n: 9, world: "nightshift", seed: "LVL-0009", kind: "press", target: 18, reward: 1700 },
+  // Press targets re-tuned when colour gates landed: a course now asks the player to match
+  // several walls on the way to the Press, so they arrive lined up less often than they did
+  // when the closing wall was the only thing worth matching.
+  { n: 9, world: "nightshift", seed: "LVL-0009", kind: "press", target: 9, reward: 1700 },
   { n: 10, world: "nightshift", seed: "LVL-0010", kind: "collect", target: 110, reward: 1900 },
   { n: 11, world: "nightshift", seed: "LVL-0011", kind: "score", target: 22000, reward: 2100 },
   { n: 12, world: "nightshift", seed: "LVL-0012", kind: "flawless", target: 1, reward: 2600, unlockEdition: "nightshift" },
@@ -498,9 +604,12 @@ export const LEVELS: LevelDef[] = [
   { n: 19, world: "final", seed: "LVL-0019", kind: "finish", target: 1, reward: 2600 },
   { n: 20, world: "final", seed: "LVL-0020", kind: "collect", target: 150, reward: 3200 },
   { n: 21, world: "final", seed: "LVL-0021", kind: "absorb", target: 28, reward: 3600 },
-  { n: 22, world: "final", seed: "LVL-0022", kind: "frugal", target: 30, reward: 4000 },
+  // The budget covers the gates. A thrift objective asks for deliberate taps rather than
+  // flailing, and every gate on the course is a tap the player is obliged to spend — so the
+  // allowance has to carry them or the objective is asking for something the course forbids.
+  { n: 22, world: "final", seed: "LVL-0022", kind: "frugal", target: 34, reward: 4000 },
   { n: 23, world: "final", seed: "LVL-0023", kind: "score", target: 42000, reward: 4600 },
-  { n: 24, world: "final", seed: "LVL-0024", kind: "press", target: 30, reward: 8000, unlockEdition: "blueprint" },
+  { n: 24, world: "final", seed: "LVL-0024", kind: "press", target: 22, reward: 8000, unlockEdition: "blueprint" },
 ];
 
 export function worldById(id: string): WorldDef {
@@ -614,6 +723,10 @@ export interface SaveData {
   runs: number;
   dailyDate: string;
   dailyBest: number;
+  /** Consecutive days a daily run has been played, and the day it was last advanced. */
+  dailyStreak: number;
+  dailyStreakDate: string;
+  dailyStreakBest: number;
   contracts: ActiveContract[];
   /** Furthest distance reached in an endless run, in world units. The record to beat. */
   endlessBest: number;
@@ -638,7 +751,12 @@ function emptySave(): SaveData {
     runs: 0,
     dailyDate: "",
     dailyBest: 0,
-    contracts: refillContracts([]),
+    dailyStreak: 0,
+    dailyStreakDate: "",
+    dailyStreakBest: 0,
+    // A new player opens with the starter in slot one, so there is something on the menu they
+    // can actually finish today.
+    contracts: refillContracts([{ id: "starter", progress: 0 }]),
     endlessBest: 0,
     endlessBestScore: 0,
     levelsDone: 0,
@@ -662,6 +780,9 @@ export function loadSave(): SaveData {
       runs: Number(parsed.runs) || 0,
       dailyDate: parsed.dailyDate ?? "",
       dailyBest: Number(parsed.dailyBest) || 0,
+      dailyStreak: Number(parsed.dailyStreak) || 0,
+      dailyStreakDate: parsed.dailyStreakDate ?? "",
+      dailyStreakBest: Number(parsed.dailyStreakBest) || 0,
       contracts: refillContracts(parsed.contracts ?? []),
       endlessBest: Number(parsed.endlessBest) || 0,
       endlessBestScore: Number(parsed.endlessBestScore) || 0,
@@ -701,22 +822,58 @@ export function editionById(id: string): Edition {
  * are close to, named, with the gap in scrap. "Come back tomorrow" is not a reason; "1,400
  * more and the coil gets wider" is.
  */
-export function nextGoal(save: SaveData): { label: string; remaining: number } | null {
-  let best: { label: string; remaining: number } | null = null;
+export type GoalKind = "level" | "upgrade" | "contract";
 
-  // An unlocked, unbeaten level is the clearest possible next thing to do.
-  if (save.levelsDone < LEVELS.length) {
+export interface NextGoal {
+  kind: GoalKind;
+  label: string;
+  /** Scrap still needed. Zero means it is available right now. */
+  remaining: number;
+}
+
+/**
+ * The cheapest upgrade the player could buy right now, if any.
+ *
+ * Deliberately independent of `nextGoal`: once somebody is warmed up the campaign becomes the
+ * headline, and a player would otherwise never be told they are carrying enough to buy
+ * something. Money sitting unspent is the meta failing to close.
+ */
+export function affordableUpgrade(save: SaveData): { label: string; cost: number } | null {
+  let best: { label: string; cost: number } | null = null;
+  for (const def of UPGRADES) {
+    const level = levelOf(save, def.id);
+    if (level >= def.maxLevel) continue;
+    const cost = upgradeCost(def, level);
+    if (cost > save.scrap) continue;
+    if (!best || cost < best.cost) best = { label: `${def.name} ${level + 1}`, cost };
+  }
+  return best;
+}
+
+export function nextGoal(save: SaveData): NextGoal | null {
+  let best: NextGoal | null = null;
+
+  // An unlocked, unbeaten level is the clearest possible next thing to do — but only for
+  // somebody who has seen the rule work. The menu holds the campaign back for exactly this
+  // reason, and pointing a first-timer at a numbered objective the menu is still hiding sends
+  // them somewhere they have no way to evaluate yet.
+  const warmedUp = save.runs >= 3 || save.levelsDone > 0;
+  if (warmedUp && save.levelsDone < LEVELS.length) {
     const next = LEVELS[save.levelsDone]!;
-    return { label: `Level ${next.n} — ${describeObjective(next).toLowerCase()}`, remaining: 0 };
+    return {
+      kind: "level",
+      label: `Level ${next.n} — ${describeObjective(next).toLowerCase()}`,
+      remaining: 0,
+    };
   }
 
   for (const def of UPGRADES) {
     const level = levelOf(save, def.id);
     if (level >= def.maxLevel) continue;
     const remaining = upgradeCost(def, level) - save.scrap;
-    if (remaining <= 0) return { label: `${def.name} ${level + 1} is affordable now`, remaining: 0 };
+    if (remaining <= 0) return { kind: "upgrade", label: `${def.name} ${level + 1}`, remaining: 0 };
     if (!best || remaining < best.remaining) {
-      best = { label: `${def.name} ${level + 1}`, remaining };
+      best = { kind: "upgrade", label: `${def.name} ${level + 1}`, remaining };
     }
   }
 
@@ -725,7 +882,7 @@ export function nextGoal(save: SaveData): { label: string; remaining: number } |
     if (!def) continue;
     const left = def.target - c.progress;
     if (left > 0 && left <= def.target * 0.34) {
-      return { label: `a contract: ${def.text.toLowerCase()}`, remaining: 0 };
+      return { kind: "contract", label: def.text.toLowerCase(), remaining: 0 };
     }
   }
 

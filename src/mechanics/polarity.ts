@@ -1,6 +1,6 @@
 import type { InputState } from "../core/input";
 import type { View } from "../render/view";
-import { COURSE_LENGTH, OPENING_LENGTH, PRESS_ZONE, type World } from "../game/world";
+import { COURSE_LENGTH, PRESS_ZONE, type World } from "../game/world";
 import type { Polarity } from "../game/types";
 import { TAU } from "../core/math";
 import { inkFor } from "../render/palette";
@@ -70,6 +70,24 @@ export class PolarityMechanic implements Mechanic {
     const y = world.player.y;
     world.promptUrgent = false;
 
+    // A compressed opening is a warm-up, not a lesson. Teaching captions belong to the run
+    // that is actually teaching; replayed for the hundredth time they are just clutter over
+    // the first eight seconds of every single run.
+    if (world.options.shortOpening) {
+      if (this.pressNearby(world)) {
+        const matched = this.polarity === world.pressPolarity;
+        world.prompt = matched ? "THE PRESS — EAT IT ALL" : "THE PRESS — TAP TO MATCH IT";
+        world.promptUrgent = !matched;
+      } else if (this.gateNearby(world)) {
+        const matched = this.polarity === world.gatePolarity;
+        world.prompt = matched ? "GATE — EAT IT" : "GATE — TAP TO MATCH";
+        world.promptUrgent = !matched;
+      } else {
+        world.prompt = "";
+      }
+      return;
+    }
+
     // Keyed off the current colour rather than off what the player has done before, so every
     // prompt stays correct for someone who taps early, taps back, or taps at random.
     if (y < 70) {
@@ -90,9 +108,9 @@ export class PolarityMechanic implements Mechanic {
         world.prompt = "TAP! MATCH THE MINES TO EAT THEM";
         world.promptUrgent = true;
       }
-    } else if (y < OPENING_LENGTH) {
+    } else if (y < world.openingLength) {
       world.prompt = "YOUR COLOUR FEEDS YOU · THE OTHER HURTS";
-    } else if (world.pressPolarity !== 0 && y > COURSE_LENGTH - PRESS_ZONE - 90) {
+    } else if (this.pressNearby(world)) {
       // Called well before the wall is reachable. The whole point of the set piece is that
       // the player sees it coming and chooses; a wall you cannot prepare for is just a tax.
       if (this.polarity === world.pressPolarity) {
@@ -101,9 +119,41 @@ export class PolarityMechanic implements Mechanic {
         world.prompt = "THE PRESS — TAP TO MATCH IT";
         world.promptUrgent = true;
       }
+    } else if (this.gateNearby(world)) {
+      if (this.polarity === world.gatePolarity) {
+        world.prompt = "GATE — EAT IT";
+      } else {
+        world.prompt = "GATE — TAP TO MATCH";
+        world.promptUrgent = true;
+      }
     } else {
       world.prompt = "";
     }
+  }
+
+  /**
+   * True on the approach to a colour gate. A shorter window than the Press gets: gates are
+   * one row rather than four, they come around every few seconds, and a warning that lingers
+   * is the thing that turned the Press prompt into wallpaper in the first place.
+   */
+  private gateNearby(world: World): boolean {
+    if (world.gatePolarity === 0 || world.gateHeadY < 0) return false;
+    const y = world.player.y;
+    return y > world.gateHeadY - 70 && y < world.gateHeadY + 10;
+  }
+
+  /**
+   * True while a Press wall is genuinely close: the approach window ahead of the spawned
+   * wall, or the whole closing zone of a bounded course. Keyed to the wall's actual position
+   * rather than to course distance — a course-distance test is true forever in an endless
+   * run, which pinned the Press instruction to the screen with nothing on it to match.
+   */
+  private pressNearby(world: World): boolean {
+    if (world.pressPolarity === 0) return false;
+    const y = world.player.y;
+    if (!world.options.endless && y > COURSE_LENGTH - PRESS_ZONE - 90) return true;
+    const head = world.pressHeadY;
+    return head >= 0 && y > head - 120 && y < head + 45;
   }
 
   draw(ctx: CanvasRenderingContext2D, world: World, view: View): void {

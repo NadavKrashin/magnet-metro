@@ -7,6 +7,18 @@
  * do any of those, and the restriction is what gives the look its identity.
  */
 
+/* The poster face travels with the game. Impact covers iOS and desktop, but Android ships
+   none of the condensed classics, and Roboto in the masthead is a different product — so the
+   18 kB latin subset of Anton (OFL, licence in src/assets/) is bundled and the system faces
+   demoted to fallbacks. */
+@font-face {
+  font-family: "Anton";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./assets/anton-latin.woff2") format("woff2");
+}
+
 :root {
   --paper: #ede7d6;
   --paper-2: #ded6c1;
@@ -15,10 +27,8 @@
   --key: #17150f;
   --overprint: #12213f;
 
-  /* Impact is on effectively every phone and desktop, and is the closest thing to a
-     poster-weight condensed face available without shipping a webfont. */
-  --display: Impact, Haettenschweiler, "Arial Narrow Bold", "Arial Narrow", system-ui,
-    sans-serif;
+  --display: "Anton", Impact, Haettenschweiler, "Arial Narrow Bold", "Arial Narrow",
+    system-ui, sans-serif;
   --body: "Helvetica Neue", Helvetica, Arial, system-ui, sans-serif;
   --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
 }
@@ -733,6 +743,15 @@ button.quiet {
   font-family: var(--display);
   font-size: 15px;
   font-weight: 400;
+}
+
+/* The secondary prompt on a sheet that already has a headline. Set in the red ink so it reads
+   as a separate offer rather than as a continuation of the sentence above it. */
+.goal-second {
+  display: inline-block;
+  margin-top: 5px;
+  color: var(--red);
+  font-weight: 700;
 }
 
 button.daily {
