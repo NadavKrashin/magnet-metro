@@ -27,7 +27,7 @@ Everything below serves that thesis. Anything that does not is a candidate for c
 npm install
 npm run dev          # dev server; open the printed network URL on a phone
 npm run test         # sim, magnet, hazard, level, endless, opening, economy, onboarding,
-                     # streak and record checks
+                     # streak, record and anti-camping checks
 npm run balance      # difficulty and skill-expression report across 12 seeds
 npm run standalone   # one self-contained HTML file in dist/standalone.html (94 kB)
 npm run verify       # build, prove progress persists, screenshot, report frame time
@@ -137,6 +137,7 @@ One rule, and every object on screen obeys it:
 |---|---|---|
 | **Scrap** | pulled in, collected | pushed away, *cannot* be collected at all |
 | **Hazards** | pulled in, eaten for points | inert, and it costs you a life |
+| **Gates and the Press** | swallowed whole | no gap to steer through; costs the multiplier and part of the haul |
 
 The second row is what makes the mechanic worth playing. A wall of red mines is not an
 obstacle to thread — it is a meal, if you are red when you reach it. Walls therefore spawn in
@@ -184,24 +185,65 @@ calling it polarity primed players with a rule that is the reverse of what the g
 
 ## Current balance readings
 
-From `npm run balance` — two bots across 12 seeds. The naive bot sweeps blindly and ignores
+From `npm run balance` — two bots across 48 seeds. The naive bot sweeps blindly and ignores
 hazards; the skilled bot targets scrap and dodges. The gap between them is skill expression.
 
 | Mechanic | Naive clear | Skilled clear | Skilled hits | Skill lift |
 |---|---|---|---|---|
-| **Switch** *(shipping)* | 50% | 100% | 0.0 | +888% |
+| **Switch** *(shipping)* | 40% | 100% | 0.3 | +1318% |
 
 Read these as directional, not final. The naive bot never avoids anything, so real first-run
 completion sits above the naive figure.
 
+**The harness runs 48 seeds because twelve was not enough to make a decision on.** Colour
+gates read as taking naive clear from 50% to 25% on twelve courses — an alarming number that
+would have justified pulling the feature. A controlled comparison across forty seeds, gates on
+versus off with the bot's own randomness held fixed, put the real effect at two points
+(45% → 43%) with hits identical to two decimal places. A headline number that moves in
+eight-point steps cannot answer a question like that.
+
 Naive clear sat at 75% before the courses were tightened. Deliberately crowding the patterns
 first took it to **zero**, which is the same failure as making the Press lethal — a difficulty
-change that reads as reasonable in the code can be brutal in play. Dialled back to 50%, with
-skilled play still clearing every course without a scratch.
+change that reads as reasonable in the code can be brutal in play. Dialled back, with skilled
+play still clearing every course without a scratch.
 
 That gap between naive and skilled is the whole shape this genre needs: forgiving to somebody
 tapping blindly, enormously generous to somebody reading the course. The remaining honest step
 is human play, not another round of tuning against a robot.
+
+## Colour gates, and why one colour is not a strategy
+
+The obvious exploit in a game whose only verb is "change colour" is to never use it. It was
+never tested, so it was measured: a bot that picks one colour, eats the hazards that happen to
+match, and steers around everything else **finished 100% of courses, never died, and banked
+46% of what switching banked**. Every wall in the game had a gap, wrong-colour hazards are
+inert, and the Press — the one thing with no gap — deliberately costs no lives. Nothing on the
+course ever required the tap.
+
+A **gate** is one full-width row of a single colour with no gap, from mid-difficulty onward,
+alternating colour each time so a camper cannot ride one colour through two of them. Match it
+and you swallow the row. Miss it and you lose the multiplier and a quarter of the tail.
+
+**Never a cell.** That is the whole design, and it is asserted in `test/hazard.test.ts`.
+Making the Press lethal once took naive completion from 50% to zero; the fix for camping had
+to be frequency, not lethality. A camper now meets a gate every few seconds and pays in the
+currency the score actually runs on, while a beginner who does the same thing dies no more
+often than before.
+
+| | before gates | after |
+|---|---|---|
+| Switching is worth, ordinary course | 2.2× | **2.9×** |
+| Switching is worth, endless | 1.7× | **4.6×** |
+| Switching is worth, hardest world | 2.3× | **3.2×** |
+| A camper's best combo, endless | 142 | **63** |
+| Campaign levels a camper can clear | all 24 | **7** — walled at level 8 |
+
+Gates are off in **Proof Sheet**: an un-dodgeable wall is the right pressure on somebody who
+understands the tap and the wrong one on somebody still working out what it does.
+
+`test/camper.ts` plays the strongest version of the exploit rather than a strawman, prints the
+table above, and asserts the properties — including that camping stays survivable, since a
+change that makes camping *deadly* rather than *unrewarding* is the failure mode to avoid.
 
 ## The Press
 
@@ -413,7 +455,7 @@ src/audio/       synthesised music and effects
 src/ads/         AdMob, consent, ATT, pacing
 src/analytics/   event taxonomy and sinks
 test/            simulation, magnet, hazard, level-reachability, opening, onboarding,
-                 streak, record, economy, balance harness
+                 streak, record, camping, economy, balance harness
 scripts/         single-file build, screenshots, marketing capture, icons
 ```
 

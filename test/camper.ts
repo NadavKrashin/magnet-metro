@@ -10,13 +10,23 @@
  * actually collect, and still dodges everything lethal. Anything a switcher does that this bot
  * cannot do is a genuine reason to tap.
  *
- * Run with: npx tsx test/camper.ts
+ * It reports the numbers and then asserts the two properties that must not silently regress:
+ * switching has to stay clearly worth doing, and camping must not be able to walk the whole
+ * campaign. Both were false before colour gates existed.
  */
 import { seedFromCode } from "../src/core/rng";
 import { World, type WorldOptions } from "../src/game/world";
 import { autopilot, newAutopilotState } from "../src/game/autopilot";
 import { PolarityMechanic } from "../src/mechanics/polarity";
-import { baseModifiers, scrapFromScore, type Modifiers } from "../src/game/progression";
+import {
+  LEVELS,
+  UPGRADES,
+  baseModifiers,
+  levelPassed,
+  scrapFromScore,
+  worldById,
+  type Modifiers,
+} from "../src/game/progression";
 import type { InputState } from "../src/core/input";
 import type { Polarity } from "../src/game/types";
 
@@ -90,6 +100,7 @@ interface Result {
   maxCombo: number;
   pressEaten: number;
   hits: number;
+  actions: number;
 }
 
 function play(
@@ -130,6 +141,7 @@ function play(
     maxCombo: world.stats.maxCombo,
     pressEaten: world.stats.pressEaten,
     hits: world.stats.hits,
+    actions: world.stats.actions,
   };
 }
 
@@ -144,7 +156,7 @@ function report(
   endless: boolean,
   mods: Modifiers,
   world0: Partial<WorldOptions> = {},
-): void {
+): { ratio: number; campDeaths: number; swapDeaths: number } {
   const camp = SEEDS.map((s) => play(s, "camp", endless, mods, world0));
   const swap = SEEDS.map((s) => play(s, "switch", endless, mods, world0));
 
@@ -170,7 +182,8 @@ function report(
 
   const cs = mean(camp.map((r) => r.score));
   const ss = mean(swap.map((r) => r.score));
-  console.log(`  switching is worth ${(ss / Math.max(1, cs)).toFixed(1)}x the score`);
+  const ratio = ss / Math.max(1, cs);
+  console.log(`  switching is worth ${ratio.toFixed(1)}x the score`);
   if (!endless) {
     const cw = mean(camp.map((r) => (r.won ? 1 : 0)));
     const sw = mean(swap.map((r) => (r.won ? 1 : 0)));
@@ -179,14 +192,74 @@ function report(
     const sp = mean(swap.map((r) => r.pressEaten));
     console.log(`  press blocks swallowed: camp ${cp.toFixed(1)}, switch ${sp.toFixed(1)}`);
   }
+
+  // Camping must never become lethal. Gates cost haul, never cells, precisely so this can be
+  // asserted — the moment they raise the death rate they are raising the floor a beginner has
+  // to clear rather than the ceiling a good player plays against.
+  const campDeaths = mean(camp.map((r) => (r.died ? 1 : 0)));
+  const swapDeaths = mean(swap.map((r) => (r.died ? 1 : 0)));
+  return { ratio, campDeaths, swapDeaths };
+}
+
+/**
+ * The decisive question behind all of this: can somebody who never taps actually finish the
+ * campaign and empty the shop? A score penalty is only a deterrent if the content itself
+ * eventually asks for something camping cannot deliver.
+ */
+function campaignReach(): { campCleared: number; firstWall: number } {
+  console.log("\nCan a camper clear the campaign?");
+  let campCleared = 0;
+  let switchCleared = 0;
+  const campFails: number[] = [];
+
+  for (const lv of LEVELS) {
+    const wd = worldById(lv.world);
+    const opts: Partial<WorldOptions> = {
+      speedScale: wd.speedScale,
+      spacingScale: wd.spacingScale,
+      hazardBias: wd.hazardBias,
+      midPresses: wd.midPresses,
+      colourGates: wd.colourGates ?? true,
+    };
+    // A fully upgraded drone, so this measures the objective rather than the shop.
+    const maxed = baseModifiers();
+    for (const d of UPGRADES) d.apply(maxed, d.maxLevel);
+
+    for (const mode of ["camp", "switch"] as const) {
+      const r = play(lv.seed, mode, false, maxed, opts);
+      const passed = levelPassed(lv, {
+        score: r.score,
+        banked: scrapFromScore(r.score, false),
+        won: r.won,
+        absorbed: r.absorbed,
+        pressEaten: r.pressEaten,
+        collected: r.collected,
+        maxCombo: r.maxCombo,
+        actions: r.actions,
+        hits: r.hits,
+      });
+      if (mode === "camp") {
+        if (passed) campCleared++;
+        else campFails.push(lv.n);
+      } else if (passed) switchCleared++;
+    }
+  }
+
+  console.log(`  camping clears   ${campCleared}/${LEVELS.length} levels`);
+  console.log(`  switching clears ${switchCleared}/${LEVELS.length} levels`);
+  if (campFails.length) console.log(`  camping is stopped at: ${campFails.join(", ")}`);
+  // Levels unlock strictly in order, so the first failure is where a camper actually stops.
+  const firstWall = campFails.length ? campFails[0]! : LEVELS.length + 1;
+  console.log(`  levels are sequential, so a camper stops for good at level ${firstWall}`);
+  return { campCleared, firstWall };
 }
 
 console.log("Camping vs switching — is one colour a viable strategy?");
-report("Bounded course, stock drone", false, baseModifiers());
-report("Endless, stock drone", true, baseModifiers());
+const bounded = report("Bounded course, stock drone", false, baseModifiers());
+const endlessR = report("Endless, stock drone", true, baseModifiers());
 // The hardest world in the campaign. If camping breaks down anywhere it should be here:
 // faster, patterns crowded together, hazards earlier and thicker, Presses mid-course.
-report("Final Edition (hardest world), stock drone", false, baseModifiers(), {
+const hardest = report("Final Edition (hardest world), stock drone", false, baseModifiers(), {
   speedScale: 1.2,
   spacingScale: 0.86,
   hazardBias: 0.18,
@@ -235,3 +308,63 @@ console.log(
   `  hazards edible: ${Math.round((mineHazard / (mineHazard + otherHazard)) * 100)}% ` +
     `— the rest must be dodged, and each one is 60 points a switcher banks`,
 );
+
+const campaign = campaignReach();
+
+// ---------------------------------------------------------------------------
+// The properties that must hold. Every one of these was false before gates.
+// ---------------------------------------------------------------------------
+let failures = 0;
+function check(name: string, ok: boolean, detail = ""): void {
+  if (ok) console.log(`  ok   ${name}`);
+  else {
+    failures++;
+    console.error(`  FAIL ${name}${detail ? ` — ${detail}` : ""}`);
+  }
+}
+
+console.log("\nProperties");
+check(
+  "switching pays clearly better on an ordinary course",
+  bounded.ratio >= 2.2,
+  `${bounded.ratio.toFixed(1)}x`,
+);
+check(
+  "switching pays enormously better the longer a run goes",
+  endlessR.ratio >= 3.5,
+  `${endlessR.ratio.toFixed(1)}x`,
+);
+check(
+  "the hardest world punishes camping hardest",
+  hardest.ratio >= 2.5,
+  `${hardest.ratio.toFixed(1)}x`,
+);
+check(
+  "camping cannot walk the whole campaign",
+  campaign.campCleared < LEVELS.length,
+  `cleared ${campaign.campCleared}/${LEVELS.length}`,
+);
+check(
+  "camping is stopped early enough to matter",
+  campaign.firstWall <= 12,
+  `first wall at level ${campaign.firstWall}`,
+);
+// The safety property the whole gate design rests on: gates cost haul, never cells, so making
+// camping unrewarding must never make the game deadlier for the beginner who does it.
+check(
+  "camping is still survivable — gates punish the score, not the run",
+  bounded.campDeaths <= 0.1,
+  `${Math.round(bounded.campDeaths * 100)}% died`,
+);
+check(
+  "and switching is not made deadly either",
+  hardest.swapDeaths <= 0.15,
+  `${Math.round(hardest.swapDeaths * 100)}% died on the hardest world`,
+);
+
+console.log(
+  failures === 0
+    ? "\nOne colour is no longer a strategy."
+    : `\n${failures} property(ies) failed.`,
+);
+process.exit(failures === 0 ? 0 : 1);

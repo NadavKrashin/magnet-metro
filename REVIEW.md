@@ -139,6 +139,44 @@ first: two ads back to back, the cheaper one teaching them to resent the sheet.
 
 ---
 
+## The one the review missed: staying one colour was a complete strategy
+
+Raised by the developer, not by this review, and the most consequential finding of the lot.
+
+*"Let's say I am red the whole time. I can just avoid the blue obstacles and keep going to the
+finish line, get a ton of scrap, and buy the whole shop."*
+
+Measured with the strongest version of that strategy rather than a strawman — a bot that never
+taps but still eats hazards matching its colour, chases only scrap it can collect, and dodges
+everything lethal — it was **correct**:
+
+| | camping | switching |
+|---|---|---|
+| Finished the course | **100%** | 100% |
+| Died | **0%** | 0% |
+| Scrap per run | 1,182 | 2,587 |
+
+Camping was completely safe, always finished, and earned 46%. The root cause was structural:
+every wall in the game has a gap, wrong-colour hazards are inert scenery, and the Press — the
+one object with no gap — deliberately costs no lives. **Nothing on the course ever required
+the only verb the game has.** The penalty for camping was pure opportunity cost, and
+opportunity cost the player cannot see changes nobody's behaviour.
+
+✅ *Fixed with colour gates — full-width, no-gap, alternating-colour walls that cost the
+multiplier and part of the haul but never a cell.* The instinct is to make something lethal;
+this project's own history says that is the thing that breaks the game, so the lever is
+frequency instead. Switching is now worth 2.9× on an ordinary course, 4.6× endless, and a
+camper is walled at **level 8 of 24** — they never see three of the four worlds, and since
+levels unlock in order they stop there for good. The results sheet now also names the cost
+out loud: scrap left behind for being the wrong colour, gates matched, and one line for a run
+spent overwhelmingly on one colour.
+
+`test/camper.ts` runs the exploit on every build and asserts all of it — including that
+camping stays *survivable*, because a change that makes camping deadly rather than
+unrewarding is the failure mode to avoid.
+
+---
+
 ## What is genuinely working — keep it
 
 - **The colour rule is a real mechanic**, not a skin. "The same object is food or death
