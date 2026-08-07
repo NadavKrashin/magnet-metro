@@ -82,6 +82,8 @@ export interface FloatText {
   maxLife: number;
   text: string;
   hue: string;
+  /** Type size multiplier. A bigger number for a bigger moment, set by the caller. */
+  size: number;
 }
 
 export interface Player {

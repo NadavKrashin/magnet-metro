@@ -137,6 +137,15 @@ export interface WorldOptions {
 
 export class World {
   readonly rng: Rng;
+  /**
+   * A separate stream for anything purely cosmetic — particle angles, speeds, lifetimes.
+   *
+   * These used to draw from the course RNG, which quietly made the level design a function of
+   * the visual effects: changing how many particles a swallow throws re-rolled every pattern
+   * after it, and re-tuned twenty-four hand-balanced levels as a side effect. It cost two
+   * broken levels to notice. Effects must never be able to move the course.
+   */
+  private readonly fxRng: Rng;
   readonly seed: number;
   readonly options: WorldOptions;
 
@@ -173,9 +182,21 @@ export class World {
   prompt = "";
   /** Set when the prompt is asking for an action right now, so the HUD can pulse it. */
   promptUrgent = false;
-  /** Full-page ink slam on a big moment, and which ink to slam. */
+  /**
+   * Full-page knockout on a swallow: the paper printed back over everything, so the page
+   * *lifts*. Damage darkens with `hitFlash`; this brightens. The two used to be the same
+   * multiply slam in the same ink — eating a red wall while red looked exactly like being hit
+   * by one, which made the best moment in the game read as the worst.
+   */
   absorbFlash = 0;
   absorbFlashInk = "#0F5FBF";
+  /**
+   * How many hazards have been swallowed in immediate succession. A gate is nine blocks and a
+   * Press thirty-six, so without this the whole set piece is a single capped thump repeated —
+   * the biggest moment in the game feeling identical to its smallest.
+   */
+  absorbStreak = 0;
+  private absorbStreakTimer = 0;
   /**
    * Seconds of near-frozen time after a big impact. A brief hitch is the cheapest way to make
    * a hit land — the eye reads the pause as weight.
@@ -241,6 +262,8 @@ export class World {
   constructor(seed: number, options: WorldOptions, mods: Modifiers = baseModifiers()) {
     this.seed = seed;
     this.rng = new Rng(seed);
+    // Offset so the two streams never run in lockstep off the same seed.
+    this.fxRng = new Rng((seed ^ 0x9e3779b9) >>> 0);
     this.options = options;
     this.mods = mods;
     this.integrity = MAX_INTEGRITY + mods.extraLives;
@@ -524,9 +547,18 @@ export class World {
     if (h.gate) this.stats.gatesEaten += 1;
     this.collectPulse = 1;
 
-    // The whole reason to change colour, so it gets the full treatment: a shove, a freeze,
-    // and an ink slam across the page.
-    this.shake = Math.min(this.shake + 1.1, 2.6);
+    // Swallowing several in a row is one event, not several — a wall eaten whole should build
+    // rather than repeat. The window is generous enough to span a gate row at speed.
+    this.absorbStreak = this.absorbStreakTimer > 0 ? this.absorbStreak + 1 : 1;
+    this.absorbStreakTimer = 0.45;
+    const swell = Math.min(1, (this.absorbStreak - 1) / 8);
+
+    // The whole reason to change colour, so it gets the full treatment: a shove, a freeze, and
+    // the page knocked back to paper. Every term climbs with the streak.
+    this.shake = Math.min(this.shake + 0.9 + swell * 1.4, 3.2);
+    // Deliberately NOT escalated with the streak. A hitch is what makes one impact land, but
+    // nine of them through a gate is judder rather than punch — and every frozen frame is
+    // course the player does not cover, which measurably cost score when it was tried.
     this.hitStop = Math.max(this.hitStop, 0.075);
     this.absorbFlash = 1;
     this.absorbFlashInk = h.polarity === -1 ? ink.red : ink.blue;
@@ -538,8 +570,12 @@ export class World {
     }
 
     const color = h.polarity === -1 ? ink.red : ink.blue;
-    this.burst(h.x, h.y, 26, color);
-    this.float(h.x, h.y, `+${gained}`, color);
+    this.burst(h.x, h.y, 26 + Math.round(swell * 22), color);
+    // Only the first of a run gets its own number, and it grows as the run does. Nine "+480"s
+    // stacked on one another is noise that hides the very thing it is reporting.
+    if (this.absorbStreak === 1 || this.absorbStreak % 4 === 0) {
+      this.float(h.x, h.y, `+${gained}`, color, 1 + swell * 1.1);
+    }
     this.events?.onAbsorb();
   }
 
@@ -681,6 +717,10 @@ export class World {
   private updateEffects(dt: number): void {
     this.shake = Math.max(0, this.shake - dt * 4.5);
     this.collectPulse = Math.max(0, this.collectPulse - dt * 4);
+    if (this.absorbStreakTimer > 0) {
+      this.absorbStreakTimer -= dt;
+      if (this.absorbStreakTimer <= 0) this.absorbStreak = 0;
+    }
     this.hitFlash = Math.max(0, this.hitFlash - dt * 2.5);
     this.absorbFlash = Math.max(0, this.absorbFlash - dt * 4.5);
 
@@ -709,9 +749,9 @@ export class World {
     // Cap total particles so a big chain reaction cannot tank the frame rate on a cheap phone.
     if (this.particles.length > 420) return;
     for (let i = 0; i < count; i++) {
-      const a = this.rng.range(0, Math.PI * 2);
-      const sp = this.rng.range(6, 26);
-      const life = this.rng.range(0.25, 0.6);
+      const a = this.fxRng.range(0, Math.PI * 2);
+      const sp = this.fxRng.range(6, 26);
+      const life = this.fxRng.range(0.25, 0.6);
       this.particles.push({
         x,
         y,
@@ -719,14 +759,14 @@ export class World {
         vy: Math.sin(a) * sp,
         life,
         maxLife: life,
-        size: this.rng.range(0.3, 0.9),
+        size: this.fxRng.range(0.3, 0.9),
         hue,
       });
     }
   }
 
-  float(x: number, y: number, text: string, hue: string): void {
-    this.floats.push({ x, y, text, hue, life: 0.9, maxLife: 0.9 });
+  float(x: number, y: number, text: string, hue: string, size = 1): void {
+    this.floats.push({ x, y, text, hue, life: 0.9, maxLife: 0.9, size });
   }
 
   // ---------------------------------------------------------------------------

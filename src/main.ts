@@ -450,7 +450,10 @@ class Game {
       onCollect: (comboIndex) => this.audio.collect(comboIndex),
       onAbsorb: () => {
         this.audio.absorb();
-        haptics.absorb();
+        // A wall swallowed whole should not feel like one pellet nine times. Past a few in a
+        // row the hand gets the heavy tap instead of the medium one.
+        if (this.world.absorbStreak >= 4) haptics.pressCrash();
+        else haptics.absorb();
       },
       onHit: (kind) => {
         this.audio.hit();

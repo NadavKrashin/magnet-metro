@@ -6,6 +6,13 @@ import { makeHalftoneTile } from "./texture";
 
 type Trace = (cx: number, cy: number, rr: number) => void;
 
+/** Two-digit hex alpha, for appending to a #rrggbb ink so it can be used in a gradient stop. */
+function alphaHex(a: number): string {
+  return Math.round(Math.max(0, Math.min(1, a)) * 255)
+    .toString(16)
+    .padStart(2, "0");
+}
+
 export class Renderer implements View {
   readonly canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
@@ -523,16 +530,19 @@ export class Renderer implements View {
     const ctx = this.ctx;
     ctx.save();
     ctx.textAlign = "center";
-    ctx.font = `900 ${Math.round(this.scale * 3.4)}px "Anton", Impact, "Haettenschweiler", "Arial Narrow", system-ui, sans-serif`;
     ctx.lineJoin = "round";
     for (const f of world.floats) {
       const t = f.life / f.maxLife;
       const x = this.toScreenX(f.x);
       const y = this.toScreenY(f.y);
+      // Size is per-float so a bigger payout is a physically bigger number. A wall swallowed
+      // whole and a single pellet reporting the same size is a wasted chance to say which.
+      const size = Math.round(this.scale * 3.4 * f.size);
+      ctx.font = `900 ${size}px "Anton", Impact, "Haettenschweiler", "Arial Narrow", system-ui, sans-serif`;
       ctx.globalAlpha = Math.min(1, t * 1.6);
       // Key-plate outline under the ink, the way display type is trapped in a two-colour print.
       ctx.strokeStyle = ink.key;
-      ctx.lineWidth = Math.max(3, this.scale * 0.42);
+      ctx.lineWidth = Math.max(3, this.scale * 0.42 * f.size);
       ctx.strokeText(f.text, x, y);
       ctx.fillStyle = f.hue;
       ctx.fillText(f.text, x, y);
@@ -547,12 +557,48 @@ export class Renderer implements View {
   drawPostFx(world: World): void {
     const ctx = this.ctx;
 
+    /**
+     * Reward and damage must not look alike, and they used to: both slammed the page with a
+     * multiply pass, and when the hazard being eaten was red — the common case, since you can
+     * only eat your own colour — both slammed it *red*. The best moment in the game and the
+     * worst were the same image, and both darkened the screen.
+     *
+     * They now move in opposite directions, in the language the art direction already uses.
+     * A swallow is a **knockout**: the paper printed back over everything, so the page lifts
+     * and the ink burns away. Damage is the **key plate**: heavy black, the loudest and
+     * darkest thing a two-colour print can do.
+     */
     if (world.absorbFlash > 0.001) {
-      // A slammed ink pass across the whole page. Reads as the press coming down hard.
+      const swell = Math.min(1, world.absorbStreak / 9);
+      const cx = this.toScreenX(world.player.x);
+      const cy = this.toScreenY(world.player.y);
+      const r = this.scale * (13 + swell * 30);
+
       ctx.save();
-      ctx.globalCompositeOperation = "multiply";
-      ctx.globalAlpha = world.absorbFlash * 0.3;
-      ctx.fillStyle = world.absorbFlashInk;
+      // A bloom struck at the drone rather than a wash over the page.
+      //
+      // A full-page paper flash was tried first and measured almost nothing: the stock is
+      // already near-white, so printing paper over it moved mean luminance by six points while
+      // a hit moved it by eighty-seven. Reward stayed invisible next to damage, which is the
+      // complaint this is meant to answer.
+      //
+      // So the reward is local and saturated instead — a blown-out core at the point of
+      // contact, ringed in the ink just swallowed, fading out. Nothing else in the game is
+      // round, bright and centred on the drone, so it cannot be mistaken for the flat dark
+      // slab that damage prints.
+      const bloom = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+      bloom.addColorStop(0, `rgba(255,255,255,${0.95 * world.absorbFlash})`);
+      bloom.addColorStop(0.3, `${world.absorbFlashInk}${alphaHex(0.8 * world.absorbFlash)}`);
+      bloom.addColorStop(1, `${world.absorbFlashInk}00`);
+      ctx.fillStyle = bloom;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, TAU);
+      ctx.fill();
+
+      // And a light lift across the rest of the page, so the whole frame registers the moment
+      // without washing the course out.
+      ctx.globalAlpha = world.absorbFlash * (0.1 + swell * 0.16);
+      ctx.fillStyle = ink.paper;
       ctx.fillRect(0, 0, this.cw, this.ch);
       ctx.restore();
     }
@@ -560,8 +606,13 @@ export class Renderer implements View {
     if (world.hitFlash > 0.001) {
       ctx.save();
       ctx.globalCompositeOperation = "multiply";
-      ctx.globalAlpha = world.hitFlash * 0.42;
+      ctx.globalAlpha = world.hitFlash * 0.4;
       ctx.fillStyle = ink.red;
+      ctx.fillRect(0, 0, this.cw, this.ch);
+      // The key plate on top of the red. This is what makes damage read as darkening at a
+      // glance, against a swallow that reads as brightening.
+      ctx.globalAlpha = world.hitFlash * 0.3;
+      ctx.fillStyle = ink.key;
       ctx.fillRect(0, 0, this.cw, this.ch);
       ctx.restore();
     }
