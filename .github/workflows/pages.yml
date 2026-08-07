@@ -8,9 +8,15 @@ name: Deploy web build
 # BEFORE THIS WORKS: GitHub -> Settings -> Pages -> Source must be set to "GitHub Actions".
 # If it is still set to "Deploy from a branch", this workflow will fail at the deploy step.
 
+# Named explicitly rather than resolved at run time. This previously triggered on every branch
+# and used `if: github.ref_name == github.event.repository.default_branch` to deploy only from
+# the trunk, so that renaming the default branch could not silently stop deployments. The
+# rename happened, and it stopped deployments anyway: the merge that should have published the
+# site evaluated that condition against the pre-rename default name and skipped. A workflow
+# whose trigger cannot be read off the file is a workflow nobody can debug.
 on:
   push:
-    branches: ["**"]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -26,10 +32,6 @@ concurrency:
 jobs:
   deploy:
     name: Build and publish docs/
-    # Only ever from the default branch, whatever it happens to be called. Written against
-    # the repository's own setting rather than a hardcoded name, so renaming the default
-    # branch to main does not silently stop deployments.
-    if: github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment:
