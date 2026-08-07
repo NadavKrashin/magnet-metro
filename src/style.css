@@ -40,11 +40,37 @@
   color-scheme: light;
 }
 
+/*
+ * Touch behaviour, and why all four of these are here.
+ *
+ * Steering is a press-and-drag held down for the length of a run, which is exactly the gesture
+ * iOS reads as "select this text". On an iPhone that raised the Copy / Look Up / Translate
+ * callout over the middle of the game, greyed the page behind it, and ate the thumb — mid-run,
+ * unprompted, and impossible to dismiss without losing the drone.
+ *
+ * `user-select: none` alone does not prevent it. Safari needs the `-webkit-` prefix, and the
+ * callout is a separate mechanism again with its own property. The HUD is what gets caught,
+ * because "TAP TO CHANGE" and the score are real text sitting over the canvas.
+ */
 * {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
   -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/*
+ * With one exception: the course-code field. Blanket-disabling selection would take the paste
+ * callout with it, and pasting a friend's code is the entire point of that input — it is the
+ * one place in the game where a long press is meant to do something.
+ */
+input {
+  -webkit-touch-callout: default;
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 html,
@@ -353,6 +379,14 @@ h2 {
   line-height: 1.5;
   margin-top: 12px;
   max-width: 62ch;
+}
+
+/* A rule the player needs before they wonder why a level got no easier after buying a coil.
+   Set apart with a keyline so it reads as a standing condition, not more blurb. */
+.note-neutral {
+  border-left: 4px solid var(--red);
+  padding-left: 9px;
+  margin-top: 10px;
 }
 
 .foot {

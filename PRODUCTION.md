@@ -91,10 +91,22 @@ in `MONETISATION.md`.
 
 One line. Everything else exists. See `ANALYTICS.md`.
 
-- [ ] Either `npm install @capacitor-firebase/analytics firebase`, drop
-      `google-services.json` and `GoogleService-Info.plist` into the native projects, and set
-      `USE_FIREBASE = true` — **or** set `ANALYTICS_ENDPOINT` to a URL you control. Both live
-      in `src/analytics/config.ts`. You can run both.
+- [x] `@capacitor-firebase/analytics` and `firebase` installed, and both native projects
+      synced — the plugin is in `Package.swift` and in the Android plugin list.
+- [ ] Register an **Android app and an iOS app** in your Firebase project, both under
+      `com.magnetmetro.game`. Firebase matches on the bundle id, and a mismatch fails silently
+      by never reporting.
+- [ ] Drop `google-services.json` into `android/app/` and `GoogleService-Info.plist` into
+      `ios/App/App/`, then add the plist **to the Xcode target** — dropping it in the folder is
+      not enough. Full walkthrough in `ANALYTICS.md`.
+- [ ] ⚠️ **Do this before the next iOS device build, not before flipping the flag.** The
+      plugin calls `FirebaseApp.configure()` at app launch regardless of `USE_FIREBASE`, so an
+      iOS build without the bundled plist crashes on startup.
+- [ ] `npm run sync`, then set `USE_FIREBASE = true` in `src/analytics/config.ts`.
+- [ ] Verify in **Analytics → DebugView** rather than waiting on reports, which lag up to 24
+      hours — otherwise "no data" and "wired it wrong" look identical for a day.
+- [ ] Optionally also set `ANALYTICS_ENDPOINT` to a URL you control, if you want the raw
+      events as well. Both sinks can run at once.
 - [ ] Confirm **D1 retention** is actually visible in whatever you pick. It is the gate for
       every decision in `MARKETING.md`.
 

@@ -30,6 +30,7 @@ import {
   levelOf,
   loadSave,
   modifiersFor,
+  modifiersForRun,
   nextGoal,
   saveSave,
   scrapFromScore,
@@ -178,6 +179,21 @@ class Game {
     this.soundEl.addEventListener("click", toggleSound);
 
     el("btn-retry").addEventListener("click", () => this.startRun());
+
+    // Clearing a level and then being offered only "Run again" is a dead end: the thing the
+    // player wants next is the thing they just unlocked, and sending them back through the
+    // menu and the level list to find it is three taps of friction at the exact moment they
+    // are most willing to keep going.
+    el("btn-next-level").addEventListener("click", () => {
+      const next = this.levelIndex + 1;
+      const lv = LEVELS[next];
+      if (!lv) return;
+      this.levelIndex = next;
+      this.isDaily = false;
+      this.isEndless = false;
+      this.seedCode = lv.seed;
+      this.startRun();
+    });
     el("btn-menu").addEventListener("click", () => {
       // Leaving the results sheet drops any level or daily context, so the next free run is
       // genuinely free rather than silently still being scored against level 7.
@@ -394,7 +410,9 @@ class Game {
             }
           : {}),
       },
-      modifiersFor(this.save),
+      // The campaign is flown on a stock drone whatever the workshop says, so clearing a level
+      // means the same thing for every player.
+      modifiersForRun(this.save, this.levelIndex >= 0),
     );
     this.buildIntegrity();
     this.world.setViewHeight(this.renderer.viewHeightWorld);
@@ -986,6 +1004,21 @@ class Game {
       this.analytics.track("rewarded_offered", { placement: "double_scrap" });
     }
     el<HTMLButtonElement>("btn-share").textContent = "Share run";
+
+    // Offered only on a level that was actually just cleared, and only when there is one after
+    // it. On a failed attempt the next level is not unlocked, and after level 24 there is
+    // nothing to go on to — in both cases the button would be a lie.
+    const upcoming = levelCleared ? LEVELS[this.levelIndex + 1] : undefined;
+    const nextBtn = el<HTMLButtonElement>("btn-next-level");
+    nextBtn.classList.toggle("hidden", !upcoming);
+    if (upcoming) {
+      nextBtn.textContent = `Next: level ${upcoming.n} — ${describeObjective(upcoming).toLowerCase()}`;
+      // Demoted to a secondary action, so the eye lands on going forward rather than on
+      // repeating something already finished.
+      el("btn-retry").classList.remove("primary");
+    } else {
+      el("btn-retry").classList.add("primary");
+    }
 
     const progressPct = Math.round((Math.min(w.player.y, COURSE_LENGTH) / COURSE_LENGTH) * 100);
     this.analytics.track("run_end", {

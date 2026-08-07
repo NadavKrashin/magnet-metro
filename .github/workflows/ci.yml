@@ -6,15 +6,11 @@ name: CI
 # properties that a small tuning change breaks silently and that nobody notices by playing.
 # None of it was enforced until now.
 
-# Pull requests cover every feature branch, so pushes are watched only on the trunk. Listing
-# both the current default branch name and `main` means renaming it later does not silently
-# stop CI — and it avoids the usual duplicate run when a branch with an open PR is pushed to.
+# Pull requests cover every feature branch, so pushes are watched only on the trunk — which
+# also avoids the usual duplicate run when a branch with an open PR is pushed to.
 on:
   push:
-    branches:
-      - main
-      - master
-      - claude/arcade-game-ad-monetization-l3h8ep
+    branches: [main]
   pull_request:
   workflow_dispatch:
 

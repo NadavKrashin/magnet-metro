@@ -596,9 +596,9 @@ export const LEVELS: LevelDef[] = [
   { n: 13, world: "overprint", seed: "LVL-0013", kind: "finish", target: 1, reward: 1800 },
   { n: 14, world: "overprint", seed: "LVL-0014", kind: "absorb", target: 20, reward: 2200 },
   { n: 15, world: "overprint", seed: "LVL-0015", kind: "frugal", target: 26, reward: 2500 },
-  { n: 16, world: "overprint", seed: "LVL-0016", kind: "score", target: 30000, reward: 2800 },
-  { n: 17, world: "overprint", seed: "LVL-0017", kind: "combo", target: 190, reward: 3100 },
-  { n: 18, world: "overprint", seed: "LVL-0018", kind: "press", target: 16, reward: 3600, unlockEdition: "letterpress" },
+  { n: 16, world: "overprint", seed: "LVL-0016", kind: "score", target: 20000, reward: 2800 },
+  { n: 17, world: "overprint", seed: "LVL-0017", kind: "combo", target: 110, reward: 3100 },
+  { n: 18, world: "overprint", seed: "LVL-0018", kind: "press", target: 8, reward: 3600, unlockEdition: "letterpress" },
 
   // Final Edition — everything at once.
   { n: 19, world: "final", seed: "LVL-0019", kind: "finish", target: 1, reward: 2600 },
@@ -608,7 +608,7 @@ export const LEVELS: LevelDef[] = [
   // flailing, and every gate on the course is a tap the player is obliged to spend — so the
   // allowance has to carry them or the objective is asking for something the course forbids.
   { n: 22, world: "final", seed: "LVL-0022", kind: "frugal", target: 34, reward: 4000 },
-  { n: 23, world: "final", seed: "LVL-0023", kind: "score", target: 42000, reward: 4600 },
+  { n: 23, world: "final", seed: "LVL-0023", kind: "score", target: 25000, reward: 4600 },
   { n: 24, world: "final", seed: "LVL-0024", kind: "press", target: 22, reward: 8000, unlockEdition: "blueprint" },
 ];
 
@@ -811,6 +811,26 @@ export function modifiersFor(save: SaveData): Modifiers {
   const mods = baseModifiers();
   for (const def of UPGRADES) def.apply(mods, levelOf(save, def.id));
   return mods;
+}
+
+/**
+ * The drone a run is actually flown with.
+ *
+ * **The campaign ignores the workshop entirely.** A level is a fixed course with a named
+ * target, so letting upgrades carry it turns a skill test into a spending test: two players
+ * clearing level 17 would not have done the same thing, and a player stuck on it would be
+ * told, in effect, to go and grind. Every level is beatable on a stock drone, and clearing one
+ * means the same thing for everyone.
+ *
+ * Upgrades still matter — they are what push a Free Run further, which is the mode with no
+ * ceiling and the only score worth compounding. The campaign is the skill ladder; the shop
+ * powers the endless chase.
+ *
+ * Expressed as a named function rather than a conditional at the call site so the rule can be
+ * asserted in a test, which is the only thing that stops it being quietly undone later.
+ */
+export function modifiersForRun(save: SaveData, isLevel: boolean): Modifiers {
+  return isLevel ? baseModifiers() : modifiersFor(save);
 }
 
 export function editionById(id: string): Edition {
