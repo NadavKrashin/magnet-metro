@@ -14,6 +14,8 @@ import {
   baseModifiers,
   describeObjective,
   levelPassed,
+  loadSave,
+  modifiersForRun,
   scrapFromScore,
   worldById,
   type LevelDef,
@@ -79,7 +81,7 @@ function achievedFor(kind: string, s: ReturnType<typeof play>): number {
 }
 
 console.log("Level reachability (autopilot)\n");
-console.log("lv  world       objective                              stock    maxed    target");
+console.log("lv  world       objective                              stock    headroom  target");
 console.log("-".repeat(88));
 
 const maxed = maxedModifiers();
@@ -88,27 +90,57 @@ for (const lv of LEVELS) {
   const stock = play(lv, baseModifiers());
   const upgraded = play(lv, maxed);
 
-  const stockPass = levelPassed(lv, stock);
-  const maxedPass = levelPassed(lv, upgraded);
-
-  // Early levels must be clearable on a stock drone; later ones may require upgrades, which is
-  // the point of the shop. What is never acceptable is a level nobody can clear at all.
-  // The opening world must be clearable with nothing bought.
-  const earlyGame = lv.world === "proof";
-  const ok = maxedPass && (!earlyGame || stockPass);
+  // The campaign is flown on a stock drone whatever the workshop says, so **every** level has
+  // to be clearable with nothing bought. This used to be required of the opening world only,
+  // with later levels allowed to lean on upgrades — which made clearing one mean different
+  // things for different players, and told anyone stuck to go and grind instead of improve.
+  const ok = levelPassed(lv, stock);
   if (!ok) failures++;
 
+  // The upgraded run no longer gates anything; it is printed as headroom, because a level a
+  // maxed drone barely improves on is one where the objective, not the shop, is the wall.
   console.log(
     `${String(lv.n).padStart(2)}  ${worldById(lv.world).name.padEnd(11)} ${describeObjective(lv).padEnd(38)} ` +
       `${String(achievedFor(lv.kind, stock)).padEnd(8)} ` +
-      `${String(achievedFor(lv.kind, upgraded)).padEnd(8)} ` +
-      `${lv.target}${ok ? "" : "   <-- UNREACHABLE"}`,
+      `${String(achievedFor(lv.kind, upgraded)).padEnd(9)} ` +
+      `${lv.target}${ok ? "" : "   <-- UNREACHABLE ON A STOCK DRONE"}`,
   );
+}
+
+/**
+ * The rule itself, not just its consequences.
+ *
+ * The reachability loop above constructs its own World, so it cannot notice if the game starts
+ * handing upgrades to level runs again. This asserts the decision function directly.
+ */
+const richSave = loadSave();
+for (const def of UPGRADES) richSave.upgrades[def.id] = def.maxLevel;
+
+const levelMods = modifiersForRun(richSave, true);
+const freeMods = modifiersForRun(richSave, false);
+const stockMods = baseModifiers();
+
+const sameAsStock = JSON.stringify(levelMods) === JSON.stringify(stockMods);
+if (!sameAsStock) {
+  failures++;
+  console.error(
+    `\n  FAIL a fully upgraded save still flies a stock drone in the campaign — got ${JSON.stringify(levelMods)}`,
+  );
+} else {
+  console.log("\n  ok   a fully upgraded save still flies a stock drone in the campaign");
+}
+
+const freeRunDiffers = JSON.stringify(freeMods) !== JSON.stringify(stockMods);
+if (!freeRunDiffers) {
+  failures++;
+  console.error("  FAIL upgrades no longer do anything in Free Run either — the shop is now pointless");
+} else {
+  console.log("  ok   upgrades still apply everywhere else, so the shop still means something");
 }
 
 console.log(
   failures === 0
-    ? "\nEvery level is clearable: the opening world on a stock drone, all of them fully upgraded."
-    : `\n${failures} level(s) cannot be cleared even fully upgraded.`,
+    ? "\nEvery level is clearable on a stock drone, and the workshop cannot change that."
+    : `\n${failures} check(s) failed.`,
 );
 process.exit(failures === 0 ? 0 : 1);

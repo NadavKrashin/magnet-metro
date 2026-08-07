@@ -122,10 +122,26 @@ So two things are campaign-only:
 - **Seals** — one per world, for clearing all six of its levels. They appear on the results
   sheet and cannot be earned any other way.
 
-`test/levels.test.ts` plays every level **under its own world's modifiers** with the autopilot,
-on both a stock and a fully upgraded drone. The opening world must be clearable with no
-upgrades; later ones may require them, because that is what makes the shop matter. It has
-caught seven impossible targets and two trivial ones so far.
+### The campaign ignores the workshop
+
+**Every level is flown on a stock drone**, whatever has been bought. A level is a fixed course
+with a named target, so letting upgrades carry it turns a skill test into a spending test: two
+players clearing level 17 would not have done the same thing, and a player stuck on one would
+be told, in effect, to go and grind rather than to get better. Clearing a level means the same
+thing for everyone.
+
+Upgrades still matter — they are what push a Free Run further, which is the mode with no
+ceiling and the only score worth compounding. **The campaign is the skill ladder; the shop
+powers the endless chase.** The Levels screen says so, because a level that got no easier after
+buying a wider coil otherwise reads as a bug.
+
+Four targets came down when this landed — 16, 17, 18 and 23 had been tuned against an upgraded
+drone and were unreachable without one.
+
+`test/levels.test.ts` plays every level **under its own world's modifiers** with the autopilot
+and requires all twenty-four to clear on a stock drone. It also asserts the rule itself: a
+fully upgraded save still flies stock in the campaign, and still gets its upgrades everywhere
+else. It has caught seven impossible targets and two trivial ones so far.
 
 ## The colour rule
 

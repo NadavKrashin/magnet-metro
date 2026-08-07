@@ -355,6 +355,14 @@ h2 {
   max-width: 62ch;
 }
 
+/* A rule the player needs before they wonder why a level got no easier after buying a coil.
+   Set apart with a keyline so it reads as a standing condition, not more blurb. */
+.note-neutral {
+  border-left: 4px solid var(--red);
+  padding-left: 9px;
+  margin-top: 10px;
+}
+
 .foot {
   font-size: 10.5px;
   border-top: 2px solid var(--key);
