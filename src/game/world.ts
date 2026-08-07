@@ -1,7 +1,7 @@
 import { Rng } from "../core/rng";
 import { ink } from "../render/palette";
 import { baseModifiers, type Modifiers } from "./progression";
-import { clamp, circlesHit, damp, dist, smoothstep } from "../core/math";
+import { clamp, damp, dist, segmentCircleHit, smoothstep } from "../core/math";
 import type {
   Anchor,
   ChainItem,
@@ -202,6 +202,13 @@ export class World {
    * `invulnTimer`: a wall you got wrong must not also shield you from the mines beyond it.
    */
   crashCooldown = 0;
+  /**
+   * The drone's position at the end of the previous step. Collisions are swept from here to
+   * where it is now, because steering moves it directly and a flick can cross the track in a
+   * single step — a point test at the destination misses everything on the way.
+   */
+  private prevX = 0;
+  private prevY = 0;
   /** A wall got wrong — costs haul, never a cell, and must not look like one that does. */
   crashFlash = 0;
   /** Contact absorbed by the mercy window after a hit. Acknowledged, not punished. */
@@ -361,6 +368,9 @@ export class World {
     if (this.invulnTimer > 0) this.invulnTimer -= dt;
     this.cameraY = damp(this.cameraY, this.player.y - this.viewHeight * 0.32, 12, dt);
 
+    this.prevX = this.player.x;
+    this.prevY = this.player.y;
+
     if (this.integrity <= 0) this.phase = "lost";
     else if (!this.options.endless && this.player.y >= COURSE_LENGTH) this.phase = "won";
   }
@@ -432,7 +442,7 @@ export class World {
       s.vx *= 0.9;
       s.vy *= 0.9;
 
-      if (!circlesHit(p.x, p.y, p.r + 1.2, s.x, s.y, s.r)) continue;
+      if (!segmentCircleHit(this.prevX, this.prevY, p.x, p.y, s.x, s.y, p.r + 1.2 + s.r)) continue;
 
       // Colour is a rule, not a hint. Touching the wrong colour must not collect it, or the
       // colour carries no meaning and the player can simply barge through everything.
@@ -503,7 +513,7 @@ export class World {
       // Only stop them leaving the world entirely; a shoved hazard should stay shoved.
       h.x = clamp(h.x, -TRACK_HALF - 10, TRACK_HALF + 10);
 
-      if (h.absorbed || !circlesHit(p.x, p.y, p.r, h.x, h.y, h.r)) continue;
+      if (h.absorbed || !segmentCircleHit(this.prevX, this.prevY, p.x, p.y, h.x, h.y, p.r + h.r)) continue;
 
       if (absorbable) {
         this.absorbHazard(h);

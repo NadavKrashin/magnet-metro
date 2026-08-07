@@ -7,6 +7,7 @@
  */
 import { World } from "../src/game/world";
 import type { Hazard, Polarity } from "../src/game/types";
+import { steer } from "../src/mechanics/types";
 
 const DT = 1 / 60;
 let failures = 0;
@@ -149,6 +150,60 @@ check(
   `chain ${g.chain.length} of 20`,
 );
 check("a mismatched gate is counted", g.stats.gatesCrashed === 1, `${g.stats.gatesCrashed}`);
+
+/**
+ * Flicking past a hazard must not pass through it.
+ *
+ * Steering moves the drone one-to-one with the thumb — `p.x += dragDx` — with no ceiling, so a
+ * fast swipe carries it tens of world units inside a single 1/60s step, on a track only sixty
+ * wide. Collision used to be tested only where it *ended up*, so the drone teleported straight
+ * through whatever was in between and the player watched a mine go by untouched. It was
+ * reported as "hitting an obstacle doesn't always bring a life down", and it is the one cause
+ * of that which is a genuine defect rather than a rule working as designed.
+ *
+ * The faster the flick, the worse it was: a 24-unit swipe cleared a mine at 12 without a
+ * scratch, and a full-width swipe cleared everything.
+ */
+for (const flick of [12, 24, 41, 60]) {
+  const f = new World(7, { anchors: false, charged: true });
+  f.setViewHeight(142);
+  f.scrap.length = 0;
+  f.hazards.length = 0;
+  f.field.polarity = 1;
+  const mine = hazard(-1, 2.2);
+  mine.x = 12;
+  mine.y = 2;
+  f.hazards.push(mine);
+  f.player.x = 0;
+  const fy0 = f.player.y;
+  steer(f, { dragDx: flick, axis: 0, tapped: false, held: true, holdTime: 0.1 });
+  f.step(DT);
+  f.player.y = fy0;
+  check(
+    `a ${flick}-unit flick past a mine still costs a cell`,
+    f.stats.hits === 1 && f.integrity === 2,
+    `hits ${f.stats.hits}, integrity ${f.integrity}, ended at x=${f.player.x.toFixed(1)}`,
+  );
+}
+
+// And the inverse: sweeping must not invent hits out of near misses.
+const clear = new World(7, { anchors: false, charged: true });
+clear.setViewHeight(142);
+clear.scrap.length = 0;
+clear.hazards.length = 0;
+clear.field.polarity = 1;
+const wide = hazard(-1, 2.2);
+wide.x = 12;
+wide.y = 40; // far up the course, nowhere near the drone's path
+clear.hazards.push(wide);
+clear.player.x = 0;
+steer(clear, { dragDx: 41, axis: 0, tapped: false, held: true, holdTime: 0.1 });
+clear.step(DT);
+check(
+  "a flick that misses is still a miss",
+  clear.stats.hits === 0 && clear.integrity === 3,
+  `hits ${clear.stats.hits}`,
+);
 
 console.log(failures === 0 ? "\nAll hazard checks passed." : `\n${failures} check(s) failed.`);
 process.exit(failures === 0 ? 0 : 1);

@@ -43,6 +43,33 @@ export function circlesHit(
   return dist2(ax, ay, bx, by) <= r * r;
 }
 
+/**
+ * Does the path travelled between two points pass within `r` of a circle centre?
+ *
+ * Steering moves the drone one-to-one with the thumb, so a fast flick can carry it tens of
+ * world units in a single 1/60s step — most of the way across a 60-unit track. Testing only
+ * where it *ended up* meant it passed straight through anything in between: the player saw a
+ * mine struck and nothing happened. Testing the whole segment is what makes a hit a hit.
+ */
+export function segmentCircleHit(
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+  cx: number,
+  cy: number,
+  r: number,
+): boolean {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const lenSq = dx * dx + dy * dy;
+  // Degenerate segment: the drone did not move, so this is an ordinary overlap test.
+  if (lenSq < 1e-9) return dist2(ax, ay, cx, cy) <= r * r;
+  // Closest approach of the centre to the segment, clamped to the segment's ends.
+  const t = clamp(((cx - ax) * dx + (cy - ay) * dy) / lenSq, 0, 1);
+  return dist2(ax + dx * t, ay + dy * t, cx, cy) <= r * r;
+}
+
 export function smoothstep(edge0: number, edge1: number, x: number): number {
   const t = clamp((x - edge0) / (edge1 - edge0), 0, 1);
   return t * t * (3 - 2 * t);
