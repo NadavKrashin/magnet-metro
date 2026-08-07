@@ -10,16 +10,29 @@ than already done.
 
 ## The single highest-leverage hour: put up a web page
 
-Do this before anything else. One free static page — GitHub Pages is enough — unlocks **four**
-separately blocked things at once:
+**The page is built.** `docs/` is ready to serve, and `npm run web` rebuilds and republishes it
+in one command so the hosted build cannot go stale. What remains needs only your details:
 
-- [ ] Host `dist/standalone.html` (94 kB, one file, no build step on the host)
-- [ ] Publish your **privacy policy** there
-- [ ] Publish **`app-ads.txt`** there
-- [ ] Set `SHARE_BASE_URL` in `src/analytics/config.ts` so shared runs become tappable links
+- [x] The playable build — `docs/index.html`, one self-contained file
+- [x] The **privacy policy** — `docs/privacy.html`, written from what the code actually
+      collects rather than from a generator
+- [x] **`app-ads.txt`** — `docs/app-ads.txt`
+- [x] A 1200×630 social preview card — `docs/social.png`, regenerate with
+      `node scripts/social.mjs`
+- [ ] **Turn Pages on**: GitHub → Settings → Pages → Source: `main` branch, `/docs` folder
+- [ ] **Fill in the four placeholders** in `docs/privacy.html` — publication date, developer
+      name, contact email, governing jurisdiction. They are capitalised and flagged in a box at
+      the top of the page.
+- [ ] **Put your AdMob publisher ID** in `docs/app-ads.txt`, replacing
+      `pub-0000000000000000`. Read the note in that file first: on a GitHub *project* site the
+      file lands in a subdirectory, where crawlers will not find it. It must sit at the root of
+      the domain you name in your store listings.
+- [ ] Set `SHARE_BASE_URL` in `src/analytics/config.ts` to the published URL, then
+      `npm run web` again — social preview tags are only emitted once it knows the host,
+      because they need absolute URLs.
 
-Without it: submissions get rejected, a large share of ad demand will not bid, sharing falls
-back to codes people have to type, and you have nowhere to send the communities in
+Without this page: submissions get rejected, a large share of ad demand will not bid, sharing
+falls back to codes people have to type, and you have nowhere to send the communities in
 `MARKETING.md` — who convert far better on a link they can play in three seconds than on an
 install request.
 
@@ -66,8 +79,13 @@ in `MONETISATION.md`.
       - `android/app/src/main/AndroidManifest.xml` → `com.google.android.gms.ads.APPLICATION_ID`
       - `ios/App/App/Info.plist` → `GADApplicationIdentifier`
       - **Android crashes on launch** if this is wrong or missing.
-- [ ] Add the full **SKAdNetwork identifier list** to `Info.plist`. Only Google's primary ID is
-      there, and iOS attribution under-reports without the rest.
+- [ ] Refresh the **SKAdNetwork identifier list**: `node scripts/skadnetwork.mjs` to see what
+      would change, then again with `--write`. The plist now carries nine identifiers rather
+      than one, but the published list is several times longer and Google adds to it over time,
+      so this wants running before every release. It must be run somewhere that can reach
+      `developers.google.com`, and it refuses to write anything that does not contain Google's
+      own identifier. A network missing from this list does not report installs at all, which
+      makes paid tests look worse than they were.
 
 ## Stage 4 — Turn the measurement on
 
@@ -100,10 +118,16 @@ One line. Everything else exists. See `ANALYTICS.md`.
 
 Copy, keywords and screenshot captions are written and ready to paste in `MARKETING.md`.
 
-- [ ] `npm run capture` for screenshots at every required size. `npm run icons` only if you
-      change the artwork.
-- [ ] Convert the captured `.webm` to `.mp4` — one `ffmpeg` line, in `MARKETING.md` — and add
-      music in an editor. The game's audio is synthesised live and is not captured.
+- [x] Screenshots at every required size and a 22-second vertical gameplay video, both
+      captured and committed. Re-run `npm run capture` after any visual change; `npm run icons`
+      only if you change the artwork.
+- [x] MP4 conversion — `npm run capture` now does it, producing
+      `marketing/gameplay-1080x1920.mp4` (H.264, faststart, silent).
+- [ ] **Add music** to the video in an editor. The game's audio is synthesised live and is not
+      captured, so the export is deliberately silent.
+- [ ] Check App Store Connect's current accepted **app preview dimensions** for each device
+      class; 1080×1920 is correct for TikTok, Reels, Shorts and Play, but Apple may want a
+      different export.
 - [ ] Upload copy, screenshots and a preview video to both stores.
 - [ ] **TestFlight** and a **Play internal testing track**. Get it onto ten phones belonging to
       other people before going public.
@@ -133,6 +157,8 @@ Copy, keywords and screenshot captions are written and ready to paste in `MARKET
 | `USE_FIREBASE` | `src/analytics/config.ts` | `false` |
 | `ANALYTICS_ENDPOINT` | `src/analytics/config.ts` | empty |
 | Bundle identifier | `capacitor.config.ts` | `com.magnetmetro.game` |
+| AdMob publisher ID | `docs/app-ads.txt` | `pub-0000000000000000` placeholder |
+| Policy placeholders | `docs/privacy.html` | four CAPITALISED placeholders |
 
 ## Known gaps
 
