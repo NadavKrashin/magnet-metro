@@ -1,0 +1,21 @@
+{
+  "name": "Magnet Metro",
+  "short_name": "Magnet Metro",
+  "display": "standalone",
+  "background_color": "#EDE7D6",
+  "theme_color": "#EDE7D6",
+  "icons": [
+    {
+      "src": "icons/icon-192.webp",
+      "type": "image/webp",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/icon-512.webp",
+      "type": "image/webp",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ]
+}

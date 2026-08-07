@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- The game's own read at 16px: manila stock, one blue circle, one red diamond. -->
+  <rect width="64" height="64" fill="#EDE7D6"/>
+  <circle cx="23" cy="27" r="13" fill="#0F5FBF"/>
+  <circle cx="23" cy="27" r="13" fill="none" stroke="#17150F" stroke-width="3"/>
+  <path d="M45 30 L58 44 L45 58 L32 44 Z" fill="#EA4327"/>
+  <path d="M45 30 L58 44 L45 58 L32 44 Z" fill="none" stroke="#17150F" stroke-width="3"/>
+</svg>
