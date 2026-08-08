@@ -391,19 +391,30 @@ export class Renderer implements View {
       const plate = inkFor(h.polarity);
 
       if (edible) {
-        // Food, and it must not be confusable with either a pickup or a threat. Drawn as a
-        // heavy open ring: no fill, no spikes. A play test could not tell these apart from
-        // large scrap when both were solid discs, and misreading one as the other is the
-        // difference between eating a wall and flinching away from it.
+        /**
+         * Food, and it must not be confusable with either a pickup or a threat. Drawn as a
+         * heavy open ring: no fill, no spikes. A play test could not tell these apart from
+         * large scrap when both were solid discs, and misreading one as the other is the
+         * difference between eating a wall and flinching away from it.
+         *
+         * The colour plate is the whole point of the shape and has to be the loudest thing in
+         * it — this is the mark that says "food, *and* it is the colour you currently are",
+         * which is the single most important read on the screen. It used to be a thin stroke
+         * between two key rings, and a play report asked whether the rings "are supposed to be
+         * with no colours". They are not: measured, the Riot edition's teal sits 0.32 from its
+         * own black and Nightshift's aubergine 0.26, so on those two editions three concentric
+         * rings resolved into one grey object. Roughly twice the ink now, and the inner key
+         * ring is gone — it added black *inside* the colour and carried no information the
+         * outer trap does not.
+         */
         ctx.strokeStyle = plate;
-        ctx.lineWidth = Math.max(3, this.scale * 0.55);
-        this.traceFor(h.polarity)(x, y, r * 0.78);
+        ctx.lineWidth = Math.max(5, this.scale * 0.95);
+        this.traceFor(h.polarity)(x, y, r * 0.7);
         ctx.stroke();
+        // A hairline key trap on the outside only, the way a colour plate is trapped in print.
         ctx.strokeStyle = ink.key;
         ctx.lineWidth = Math.max(1.5, this.scale * 0.13);
         this.traceFor(h.polarity)(x, y, r * 1.06);
-        ctx.stroke();
-        this.traceFor(h.polarity)(x, y, r * 0.5);
         ctx.stroke();
         continue;
       }

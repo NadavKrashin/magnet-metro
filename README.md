@@ -318,6 +318,18 @@ They now move in opposite directions:
 - **Damage is the key plate** — red and then heavy black, flat across the whole frame. Measured
   at 18% of pixels driven below a quarter brightness.
 
+**A matching hazard is drawn as an open ring**, not a disc — a play test could not tell solid
+edible hazards apart from large scrap, and misreading one as the other is the difference
+between eating a wall and flinching away from it. The colour plate has to be the loudest thing
+in that mark, because it is what says "food, *and* it is the colour you currently are". It was
+a thin stroke between two key rings, and a later report asked whether the rings "are supposed
+to be with no colours". They are not: Riot's teal sits 0.32 from its own black in plain RGB
+distance and Nightshift's aubergine 0.26, so on those two editions three concentric rings
+resolved into one grey object. The colour stroke is now roughly twice as heavy and the inner
+key ring is gone — it added black *inside* the colour and carried nothing the outer trap does
+not. That is 55% more colour ink against 32% less key, and the colour-to-key ratio goes from
+2.1 to 4.8.
+
 A full-page *paper* flash was tried for the reward first and measured almost nothing: the stock
 is already near-white, so printing paper over it moved mean luminance six points while a hit
 moved it eighty-seven. On a light page you cannot brighten your way to emphasis — you have to
@@ -384,13 +396,34 @@ playing well. Replaying today's course cannot pay twice. It needs no server: the
 knows what day it last played. `test/streak.test.ts` covers the arithmetic that is wrong in
 silence — month, year and leap-day boundaries, gaps, replays, and the at-risk window.
 
-**Contracts** are three rotating objectives that ask for a specific behaviour — swallow thirty
-mines, finish without losing a cell, hold a chain of sixty. They pay in the same scrap the
-shop spends, so they feed the existing loop rather than introducing a second currency. A new
-save opens with a one-off **starter** contract sized to finish in two ordinary runs, which is
-never drawn again.
+**Contracts** are three rotating objectives that ask for a specific behaviour — swallow
+forty-five mines, finish three courses clean, hold a chain of sixty in three runs. They pay in
+the same scrap the shop spends, so they feed the existing loop rather than introducing a second
+currency. A new save opens with a one-off **starter** contract sized to finish in two ordinary
+runs, which is never drawn again.
+
+**Every standing contract takes several runs**, and that was not always true. Three of them had
+a target of 1 — one clean course, one run with a chain of sixty, one run pulling in 140 — and
+paid 3,000 to 5,000 each. Three are active at a time and an ordinary course satisfies all
+three, so a "contract" was really a per-run bonus of eight to twelve thousand that refilled and
+paid again immediately. Measured, six levels paid **57,435 against a 240,406 shop** — a quarter
+of everything for sale, in six runs — and 39,600 of that was contracts against 12,635 of actual
+run haul. A play report put it in one line: five levels, fifty thousand scrap, enough to buy
+most of the store.
+
+Targets are now multi-run and rewards are around one good run's haul rather than five. The same
+six levels pay 25,235, and `test/economy.test.ts` asserts the properties rather than the
+numbers: no standing contract can be finished in a single run, none pays more than a good run,
+and three landing at once is under 5% of the shop.
 
 ## Progression: workshop, upgrades, editions
+
+**Replaying a cleared level pays nothing.** The level *bonus* was frontier-only from the start,
+on the stated grounds that the easiest level cannot be farmed for scrap — but the run's own
+haul was banked unconditionally, so the rule was not true. Level 1 takes about thirty seconds
+and banks a little over two thousand: the whole shop in a couple of hours of replaying the
+first course in the game. The rewarded "double it" offer follows the same rule, since doubling
+a share of zero is not an offer worth making.
 
 Everything scored in a run is banked as scrap and spent in the workshop. The point is to give
 a 30-second run consequences that outlive it — a run that only produces a number is finished

@@ -33,7 +33,7 @@ import {
   modifiersForRun,
   nextGoal,
   saveSave,
-  scrapFromScore,
+  haulFor,
   settleContracts,
   type ScrapCredit,
   upgradeCost,
@@ -117,8 +117,12 @@ class Game {
   private quitRun = false;
   /** Score of the run whose results are on screen, for the bonus and the share text. */
   private lastRunScore = 0;
-  /** Whether the run on the results sheet was endless, for the rewarded bonus maths. */
-  private lastRunEndless = false;
+  /**
+   * What the run on the results sheet actually banked. The rewarded bonus doubles *this*, not
+   * the raw score: a replayed level banks nothing, and recomputing from the score would have
+   * paid a full haul through the ad for a course that is deliberately worthless.
+   */
+  private lastRunBanked = 0;
   /**
    * Demo mode: the game plays itself and the interface gets out of the way. Enabled with
    * ?demo=1, and used to film gameplay for store listings and ad creative without needing a
@@ -743,8 +747,7 @@ class Game {
   private async watchToDouble(): Promise<void> {
     const earned = await this.ads.showRewarded("double_scrap");
     if (!earned) return;
-    const bonus =
-      scrapFromScore(this.lastRunScore, this.lastRunEndless) * (REWARD.doubleScrapMultiplier - 1);
+    const bonus = this.lastRunBanked * (REWARD.doubleScrapMultiplier - 1);
     this.save.scrap += bonus;
     saveSave(this.save);
     this.analytics.track("currency_earned", { amount: bonus, source: "rewarded_double" });
@@ -949,7 +952,6 @@ class Game {
     this.coachEl.classList.add("hidden");
     const w = this.world;
     this.lastRunScore = w.score;
-    this.lastRunEndless = this.isEndless;
     this.reviveEl.classList.add("hidden");
     this.audio.stopMusic();
     this.audio.finish(w.phase === "won");
@@ -974,10 +976,14 @@ class Game {
     // bank jumping by thousands after a results sheet that said +250: the run's own haul was
     // the only credit ever shown, while contracts and level bonuses paid silently.
     const credits: ScrapCredit[] = [];
-    const banked = scrapFromScore(record.score, this.isEndless);
+    // Zero when replaying a level that is already cleared; see haulFor.
+    const banked = haulFor(this.save, this.levelIndex, record.score, this.isEndless);
+    this.lastRunBanked = banked;
     this.save.scrap += banked;
     this.save.lifetimeScrap += banked;
-    credits.push({ label: this.isEndless ? "Distance haul" : "Run haul", amount: banked });
+    if (banked > 0) {
+      credits.push({ label: this.isEndless ? "Distance haul" : "Run haul", amount: banked });
+    }
     this.save.runs += 1;
 
     // The record the run was played against, before this run moves it. A record only means
@@ -1217,7 +1223,9 @@ class Game {
     el("compare").innerHTML = this.personalSummary();
 
     const doubleBtn = el<HTMLButtonElement>("btn-double");
-    doubleBtn.disabled = !this.ads.rewardedReady || record.score <= 0;
+    // Nothing banked, nothing to double. A replayed level is the case that matters: the sheet
+    // must not offer an ad in exchange for a share of zero.
+    doubleBtn.disabled = !this.ads.rewardedReady || banked <= 0;
     if (!doubleBtn.disabled) {
       this.analytics.track("rewarded_offered", { placement: "double_scrap" });
     }

@@ -48,6 +48,29 @@ export function scrapFromScore(score: number, endless = false): number {
   return Math.round(effective * SCRAP_RATE);
 }
 
+/**
+ * What a finished run actually banks.
+ *
+ * Replaying a level you have already cleared pays nothing. The level *bonus* was frontier-only
+ * from the start, on the stated grounds that the easiest level cannot be farmed for scrap — but
+ * the run's own haul was paid unconditionally, so the rule was not true. Level 1 takes about
+ * thirty seconds and banks a little over two thousand: the entire shop in a couple of hours of
+ * replaying the first course in the game. Beating a cleared level again is worth doing for a
+ * better time or a cleaner run, not for money.
+ *
+ * `levelIndex` is the index into LEVELS, or -1 for a free run, a daily or a shared course —
+ * none of which can be farmed, because none of them is the same course twice.
+ */
+export function haulFor(
+  save: SaveData,
+  levelIndex: number,
+  score: number,
+  endless: boolean,
+): number {
+  if (levelIndex >= 0 && levelIndex < save.levelsDone) return 0;
+  return scrapFromScore(score, endless);
+}
+
 export interface Modifiers {
   /** Added to the mechanic's base field radius, in world units. */
   fieldRadiusBonus: number;
@@ -362,46 +385,63 @@ export const CONTRACTS: ContractDef[] = [
     starter: true,
     measure: (r) => r.absorbed,
   },
+  /*
+   * Three of these used to have a target of 1 — a single clean course, a single run with a
+   * chain of 60, a single run pulling in 140 — and paid 3,000 to 5,000 each. Three are active
+   * at a time and an ordinary course satisfies all three, so a completed contract was not a
+   * standing goal at all: it was a per-run bonus of eight to twelve thousand, which then
+   * refilled and paid again on the very next run.
+   *
+   * Measured, six levels paid 57,435 scrap against a 240,406 shop — a quarter of everything
+   * for sale, in six runs — and 39,600 of that came from contracts alone, against 12,635 of
+   * actual run haul. A play report put it in one line: five levels, fifty thousand scrap,
+   * enough to buy most of the store.
+   *
+   * So every target is now multi-run and every reward is around one good run's haul rather
+   * than five. A contract should be worth roughly as much as playing well for a run, not
+   * several times more — otherwise the haul, which is the thing skill actually moves, stops
+   * mattering.
+   */
   {
     id: "swallow",
     text: "Swallow mines in your own colour",
-    target: 30,
-    reward: 3500,
+    target: 45,
+    reward: 2200,
     measure: (r) => r.absorbed,
   },
   {
     id: "haul",
     text: "Bank scrap",
-    target: 8000,
-    reward: 4000,
+    target: 15000,
+    reward: 2400,
     measure: (r) => r.banked,
   },
   {
     id: "finish",
     text: "Reach the end of a course",
-    target: 3,
-    reward: 3000,
+    target: 6,
+    reward: 2000,
     measure: (r) => (r.won ? 1 : 0),
   },
   {
     id: "flawless",
-    text: "Finish a course without losing a cell",
-    target: 1,
-    reward: 5000,
+    text: "Finish 3 courses without losing a cell",
+    target: 3,
+    reward: 2600,
     measure: (r) => (r.won && r.hits === 0 ? 1 : 0),
   },
   {
     id: "chain",
-    text: "Hold a chain of 60 in one run",
-    target: 1,
-    reward: 3500,
+    text: "Hold a chain of 60, in 3 runs",
+    target: 3,
+    reward: 2200,
     measure: (r) => (r.maxCombo >= 60 ? 1 : 0),
   },
   {
     id: "pickup",
-    text: "Pull in 140 pieces in one run",
-    target: 1,
-    reward: 3000,
+    text: "Pull in 140 pieces, in 3 runs",
+    target: 3,
+    reward: 2000,
     measure: (r) => (r.collected >= 140 ? 1 : 0),
   },
 ];
