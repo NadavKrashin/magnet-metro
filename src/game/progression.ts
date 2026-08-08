@@ -572,6 +572,20 @@ export interface LevelDef {
  * at all; later ones may require them, because that is what makes the shop matter. A target
  * nobody can reach is the one outcome the test refuses.
  */
+/*
+ * Five targets came down when the closing zone stopped stacking Presses — 9, 14, 18, 21 and 23.
+ *
+ * The generator used to emit a Press for every slot inside the 150-unit closing zone, which
+ * put four identical walls back to back at the end of every course. A player who matched them
+ * banked something like a hundred free swallows in the last four seconds, and the targets had
+ * quietly been tuned around that: level 5 asked for fourteen swallows while the ending alone
+ * handed over twenty-four, so the objective was decided before the course had begun. A play
+ * report put it plainly — "it's so easy since the end is just a ton of my colour".
+ *
+ * With one wall the ending pays about eight. These numbers are what the autopilot actually
+ * reaches on a stock drone now, and the swallow objectives once again have to be met by
+ * playing the course rather than by turning up to the finish on the right colour.
+ */
 export const LEVELS: LevelDef[] = [
   // Proof Sheet — learn the rule, no upgrades assumed.
   { n: 1, world: "proof", seed: "LVL-0001", kind: "finish", target: 1, reward: 400 },
@@ -587,28 +601,28 @@ export const LEVELS: LevelDef[] = [
   // Press targets re-tuned when colour gates landed: a course now asks the player to match
   // several walls on the way to the Press, so they arrive lined up less often than they did
   // when the closing wall was the only thing worth matching.
-  { n: 9, world: "nightshift", seed: "LVL-0009", kind: "press", target: 9, reward: 1700 },
+  { n: 9, world: "nightshift", seed: "LVL-0009", kind: "press", target: 6, reward: 1700 },
   { n: 10, world: "nightshift", seed: "LVL-0010", kind: "collect", target: 110, reward: 1900 },
   { n: 11, world: "nightshift", seed: "LVL-0011", kind: "score", target: 22000, reward: 2100 },
   { n: 12, world: "nightshift", seed: "LVL-0012", kind: "flawless", target: 1, reward: 2600, unlockEdition: "nightshift" },
 
   // Overprint — the screen is busy and the gaps are thin.
   { n: 13, world: "overprint", seed: "LVL-0013", kind: "finish", target: 1, reward: 1800 },
-  { n: 14, world: "overprint", seed: "LVL-0014", kind: "absorb", target: 20, reward: 2200 },
+  { n: 14, world: "overprint", seed: "LVL-0014", kind: "absorb", target: 14, reward: 2200 },
   { n: 15, world: "overprint", seed: "LVL-0015", kind: "frugal", target: 26, reward: 2500 },
   { n: 16, world: "overprint", seed: "LVL-0016", kind: "score", target: 20000, reward: 2800 },
   { n: 17, world: "overprint", seed: "LVL-0017", kind: "combo", target: 110, reward: 3100 },
-  { n: 18, world: "overprint", seed: "LVL-0018", kind: "press", target: 8, reward: 3600, unlockEdition: "letterpress" },
+  { n: 18, world: "overprint", seed: "LVL-0018", kind: "press", target: 6, reward: 3600, unlockEdition: "letterpress" },
 
   // Final Edition — everything at once.
   { n: 19, world: "final", seed: "LVL-0019", kind: "finish", target: 1, reward: 2600 },
   { n: 20, world: "final", seed: "LVL-0020", kind: "collect", target: 150, reward: 3200 },
-  { n: 21, world: "final", seed: "LVL-0021", kind: "absorb", target: 28, reward: 3600 },
+  { n: 21, world: "final", seed: "LVL-0021", kind: "absorb", target: 19, reward: 3600 },
   // The budget covers the gates. A thrift objective asks for deliberate taps rather than
   // flailing, and every gate on the course is a tap the player is obliged to spend — so the
   // allowance has to carry them or the objective is asking for something the course forbids.
   { n: 22, world: "final", seed: "LVL-0022", kind: "frugal", target: 34, reward: 4000 },
-  { n: 23, world: "final", seed: "LVL-0023", kind: "score", target: 25000, reward: 4600 },
+  { n: 23, world: "final", seed: "LVL-0023", kind: "score", target: 17500, reward: 4600 },
   { n: 24, world: "final", seed: "LVL-0024", kind: "press", target: 22, reward: 8000, unlockEdition: "blueprint" },
 ];
 

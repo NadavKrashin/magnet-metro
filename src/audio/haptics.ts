@@ -12,8 +12,16 @@ import { Haptics, ImpactStyle, NotificationType } from "@capacitor/haptics";
  * haptics off, and the web build all take the same path — nothing happens and nothing throws.
  * Vibration must never be the thing that ends a run.
  */
+/**
+ * Minimum gap between swallow taps. A haptic motor takes roughly this long to strike and
+ * settle, so anything closer together arrives as one continuous buzz rather than as beats.
+ */
+const ABSORB_MIN_GAP_MS = 90;
+
 class HapticsService {
   private native = false;
+  /** When the last swallow tap was fired, so a wall does not become one long vibration. */
+  private lastAbsorb = 0;
   /** Follows the sound toggle: someone who silenced the game wants it silent in the hand too. */
   private enabled = true;
 
@@ -36,9 +44,33 @@ class HapticsService {
     });
   }
 
-  /** Swallowing a matching hazard — the payoff the whole mechanic is built around. */
+  /**
+   * Swallowing a matching hazard — the payoff the whole mechanic is built around.
+   *
+   * Deliberately Light, and rate limited. A wall is nine blocks or thirty-six, and this used to
+   * fire a Medium per block with a *Heavy* — the mismatch buzz — once the run passed four. The
+   * best moment in the game therefore reached the thumb as thirty-six heavy pulses of the same
+   * motor pattern that means damage, which is a sustained angry buzz and nothing like a reward.
+   * A play test said so: "it still sounds and feels like a hit".
+   *
+   * The motor also cannot resolve pulses this close together, so firing per block does not even
+   * buy detail — it just smears into one long vibration.
+   */
   absorb(): void {
+    const now = Date.now();
+    if (now - this.lastAbsorb < ABSORB_MIN_GAP_MS) return;
+    this.lastAbsorb = now;
+    this.impact(ImpactStyle.Light);
+  }
+
+  /**
+   * A whole wall gone. An ascending two-beat roll, which is the one thing in the vocabulary
+   * that a single heavy thud can never be mistaken for.
+   */
+  absorbFinish(count: number): void {
+    if (!this.native || !this.enabled) return;
     this.impact(ImpactStyle.Medium);
+    if (count >= 6) window.setTimeout(() => this.impact(ImpactStyle.Heavy), 80);
   }
 
   /** Losing a cell. The heaviest thing in the game, and it should feel like it. */

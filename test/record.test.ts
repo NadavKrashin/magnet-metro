@@ -40,6 +40,7 @@ function runWithRecord(recordLine: number, steps: number, endless = true) {
   const events: WorldEvents = {
     onCollect: () => {},
     onAbsorb: () => {},
+  onAbsorbEnd: () => {},
     onHit: () => {},
     onFlip: () => {},
     onRecord: () => {

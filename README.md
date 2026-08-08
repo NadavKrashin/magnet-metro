@@ -323,9 +323,9 @@ is already near-white, so printing paper over it moved mean luminance six points
 moved it eighty-seven. On a light page you cannot brighten your way to emphasis — you have to
 go local and saturated instead.
 
-Swallows in quick succession now build rather than repeat: a gate is nine blocks and a Press
+Swallows in quick succession build rather than repeat: a gate is nine blocks and a Press
 thirty-six, and each one used to be an identical capped thump. A streak counter escalates the
-shake, the particle count, the size of the number that floats up, and the haptic. It
+shake, the particle count, the size of the number that floats up, the note, and the haptic. It
 deliberately does **not** escalate the hit-stop — nine freezes through one wall is judder, not
 punch, and each frozen frame is course the player does not cover, which measurably cost score
 when it was tried.
@@ -342,6 +342,33 @@ naive first-run completion from 50% to zero. Rebuilt to cost only the chain, it 
 75% while lifting skilled scores from 18,700 to 24,500 — beginners always reach the ending,
 experts get an enormous swing. A course that simply stops at a distance marker has no shape;
 this gives every run a climax.
+
+### One wall, not four
+
+The closing branch of the generator had no latch, so it emitted a Press for **every** slot in
+the 150-unit closing zone. A Press consumes 50 units, so four identical walls stacked at
+roughly 1370, 1420, 1470 and 1521 — all the same colour, because the polarity is fixed on the
+first one.
+
+That broke the ending in two directions at once, and both were reported from play. Matching
+them was around a hundred free swallows in the last four seconds, which quietly decided every
+swallow objective before the course had started: level 5 asked for fourteen while the ending
+alone handed over twenty-four. And the fourth wall began past the 1500-unit finish line, so it
+was drawn on screen and could never be reached — the results sheet arrived over a wall the
+player was still looking at.
+
+The fix is a latch: one wall, and an empty run-out behind it. It costs no RNG draw, so every
+seeded course still builds identically — but the ending now pays about eight swallows instead
+of a hundred, and five level targets came down to match what the autopilot actually reaches.
+`test/ending.test.ts` pins the wall to four rows of nine, entirely inside the course, with
+nothing generated past the line.
+
+A bounded settle window at the finish was built alongside this, to hold the run open while the
+last blocks were drawn in. Measured across all twenty-four levels it never held for a single
+frame — with one wall the swallow has already resolved by the line — so it was removed rather
+than kept as insurance. It also reordered the win and loss checks, which changes what counts
+as a cleared course, and that is not a change worth making for a mechanism with nothing to
+show for itself.
 
 ## Coming back tomorrow
 
@@ -474,6 +501,28 @@ driven by the player's combo. Hats enter once they have something going, and the
 arrives on a strong combo, so the soundtrack builds as they build and thins out when they get
 hit. Collection blips climb a pentatonic ladder as the combo rises. That coupling between
 performance and score is most of why an arcade game feels exciting.
+
+### Swallowing had to stop sounding like damage
+
+A play test reported that eating your own colour "still sounds and feels like a hit", and both
+halves of that were true for the same two reasons.
+
+**The contour was wrong.** The swallow was a tone sweeping *down* to 42 Hz under a noise burst
+sweeping down from 1800 to 180 — which is, note for note, the shape of the damage sound sitting
+next to it in the same file. Descending pitch under descending noise is the universal
+vocabulary for being hurt, so the best moment in the game was announcing itself in the language
+of the worst one.
+
+**And a wall is not one block.** It fired once per block, so a Press was up to thirty-six
+overlapping 0.42-second low sweeps: not an impact but a sustained roar. The haptics were worse
+— a Medium impact per block, and past a run of four the *press-crash* buzz, so the payoff
+reached the thumb as thirty-six pulses of the pattern that means damage.
+
+Each block is now a short bright note climbing through the run, the same ladder the collection
+blips use, resolving on one chord when the wall is finished. The hand gets a light tap rate
+limited to 90 ms — closer than that and a haptic motor cannot strike and settle, so the beats
+smear into one long buzz — and an ascending two-beat roll at the end, which is the one thing in
+the vocabulary a single heavy thud can never be mistaken for.
 
 ## Performance
 

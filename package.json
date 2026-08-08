@@ -9,7 +9,7 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host",
     "typecheck": "tsc --noEmit",
-    "test": "tsx test/sim.test.ts && tsx test/magnet.test.ts && tsx test/hazard.test.ts && tsx test/levels.test.ts && tsx test/endless.test.ts && tsx test/opening.test.ts && tsx test/coach.test.ts && tsx test/economy.test.ts && tsx test/economy-credit.test.ts && tsx test/onboarding.test.ts && tsx test/streak.test.ts && tsx test/record.test.ts && tsx test/camper.ts",
+    "test": "tsx test/sim.test.ts && tsx test/magnet.test.ts && tsx test/hazard.test.ts && tsx test/levels.test.ts && tsx test/endless.test.ts && tsx test/opening.test.ts && tsx test/coach.test.ts && tsx test/ending.test.ts && tsx test/economy.test.ts && tsx test/economy-credit.test.ts && tsx test/onboarding.test.ts && tsx test/streak.test.ts && tsx test/record.test.ts && tsx test/camper.ts",
     "balance": "tsx test/balance.ts",
     "standalone": "npm run build && node scripts/inline.mjs",
     "web": "npm run build && node scripts/publish-web.mjs",

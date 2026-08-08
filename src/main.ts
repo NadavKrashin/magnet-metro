@@ -640,12 +640,17 @@ class Game {
     this.audio.startMusic();
     this.world.events = {
       onCollect: (comboIndex) => this.audio.collect(comboIndex),
-      onAbsorb: () => {
-        this.audio.absorb();
-        // A wall swallowed whole should not feel like one pellet nine times. Past a few in a
-        // row the hand gets the heavy tap instead of the medium one.
-        if (this.world.absorbStreak >= 4) haptics.pressCrash();
-        else haptics.absorb();
+      // A wall is one event with many beats. The note climbs through the run so nine blocks
+      // through a gate is an arpeggio rather than the same thump nine times, and the hand gets
+      // a light rate-limited tap rather than the heavy pulse that means damage.
+      onAbsorb: (streakIndex) => {
+        this.audio.absorb(streakIndex);
+        haptics.absorb();
+      },
+      // And it resolves on one chord when the run ends, so a Press has an ending.
+      onAbsorbEnd: (count) => {
+        this.audio.absorbFinish(count);
+        haptics.absorbFinish(count);
       },
       onHit: (kind) => {
         this.audio.hit();
@@ -752,7 +757,7 @@ class Game {
     el<HTMLButtonElement>("btn-double").disabled = true;
     el("result-goal").innerHTML = `<b>+${bonus.toLocaleString()} scrap</b> added. Banked: ${this.save.scrap.toLocaleString()}.`;
     this.audio.unlock();
-    this.audio.absorb();
+    this.audio.absorb(0);
   }
 
   /**
@@ -1354,7 +1359,7 @@ class Game {
         this.analytics.track("currency_spent", { amount: cost, sink: def.id });
         this.analytics.track("upgrade_bought", { id: def.id, level: level + 1 });
         this.audio.unlock();
-        this.audio.absorb();
+        this.audio.absorb(0);
         this.renderShop();
       });
 
@@ -1423,7 +1428,7 @@ class Game {
         applyEdition(ed);
         this.renderer.resize();
         this.audio.unlock();
-        this.audio.absorb();
+        this.audio.absorb(0);
         this.renderShop();
       });
 
