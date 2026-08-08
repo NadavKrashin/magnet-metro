@@ -348,6 +348,8 @@ export interface RunSummary {
   pressEaten: number;
   collected: number;
   maxCombo: number;
+  /** Un-dodgeable walls met on the wrong colour. Neither costs a cell, so `hits` misses them. */
+  wallsCrashed: number;
   actions: number;
   hits: number;
 }
@@ -768,6 +770,70 @@ export function levelPassed(level: LevelDef, r: RunSummary): boolean {
   }
 }
 
+/**
+ * Mastery: three marks per level instead of a pass/fail tick.
+ *
+ * Twenty-four levels is not much content, and once cleared each one had nothing left to say —
+ * a problem sharpened by making a replayed level bank no scrap, which removed the only reason
+ * left to open one again. Three marks turns twenty-four courses into seventy-two goals without
+ * authoring a single new course.
+ *
+ * The grades are deliberately **universal**, not per-level numbers. A tightened target on each
+ * level would be twenty-four more hand-tuned figures to keep reachable, and every one of them a
+ * chance to ship a goal nobody can meet. These three apply identically to all eight objective
+ * kinds and need no tuning at all:
+ *
+ *   1. **Cleared** — the level's own objective.
+ *   2. **Clean** — cleared without losing a cell.
+ *   3. **Perfect** — cleared, clean, and never on the wrong colour at a wall.
+ *
+ * The third is the one worth chasing, and it grades the thesis directly. Gates and the Press
+ * cost no cells, so a run can be spotless by the `hits` measure while having got every
+ * un-dodgeable wall on the course wrong. "You were the right colour every single time" is what
+ * playing this game well actually means.
+ *
+ * Mastery pays no scrap. The economy is already tuned, and seals and editions have always been
+ * the axis that money cannot touch — this belongs with them.
+ */
+export const MASTERY_TIERS = 3;
+
+export function levelMastery(level: LevelDef, r: RunSummary): number {
+  if (!levelPassed(level, r)) return 0;
+  if (r.hits > 0) return 1;
+  return r.wallsCrashed > 0 ? 2 : 3;
+}
+
+export function describeMastery(tier: number): string {
+  return tier >= 3 ? "Perfect" : tier === 2 ? "Clean" : tier === 1 ? "Cleared" : "";
+}
+
+/** What the next mark on this level would ask for, or "" once it is fully mastered. */
+export function nextMasteryAsk(tier: number): string {
+  if (tier <= 0) return "";
+  if (tier === 1) return "Clear it without losing a cell";
+  if (tier === 2) return "Clear it clean, and never on the wrong colour at a wall";
+  return "";
+}
+
+export function masteryOf(save: SaveData, n: number): number {
+  return save.levelMastery[String(n)] ?? 0;
+}
+
+/** Marks earned against marks available. The game's only overall completion figure. */
+export function masteryTotal(save: SaveData): { earned: number; possible: number } {
+  let earned = 0;
+  for (const lv of LEVELS) earned += masteryOf(save, lv.n);
+  return { earned, possible: LEVELS.length * MASTERY_TIERS };
+}
+
+/** Marks earned within one world, for the heading on the Levels screen. */
+export function masteryInWorld(save: SaveData, worldId: string): { earned: number; possible: number } {
+  const levels = levelsInWorld(worldId);
+  let earned = 0;
+  for (const lv of levels) earned += masteryOf(save, lv.n);
+  return { earned, possible: levels.length * MASTERY_TIERS };
+}
+
 export interface SaveData {
   scrap: number;
   lifetimeScrap: number;
@@ -793,6 +859,8 @@ export interface SaveData {
    * number the game can collect: the level where attempts pile up is the level people quit on.
    */
   levelAttempts: Record<string, number>;
+  /** Best mastery tier reached on each level, keyed by level number. Never goes down. */
+  levelMastery: Record<string, number>;
   /**
    * Whether the first-run tour has been seen through, or skipped. Stored rather than derived
    * from the run count, because a player who quits mid-tour on their first run has not been
@@ -821,6 +889,7 @@ function emptySave(): SaveData {
     endlessBestScore: 0,
     levelsDone: 0,
     levelAttempts: {},
+    levelMastery: {},
     coached: false,
   };
 }
@@ -849,6 +918,10 @@ export function loadSave(): SaveData {
       endlessBestScore: Number(parsed.endlessBestScore) || 0,
       levelsDone: Number(parsed.levelsDone) || 0,
       levelAttempts: parsed.levelAttempts ?? {},
+      // A save from before mastery existed keeps its cleared levels but starts every mark at
+      // zero. Back-filling "Cleared" would be a guess: nothing in the old save records whether
+      // those runs were clean, and awarding marks nobody earned devalues the whole thing.
+      levelMastery: parsed.levelMastery ?? {},
       // A save written before the tour existed belongs to someone who has already worked the
       // interface out for themselves. Interrupting their next run to explain the score counter
       // would be worse than never having built it, so only a genuinely blank slate is coached.

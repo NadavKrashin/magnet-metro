@@ -1217,6 +1217,77 @@ dl.glossary dd {
   border-bottom: 2px solid var(--key);
 }
 
+/* ---------- Mastery marks ---------- */
+
+/* Square, flat, hard-edged — the same register mark the rest of the print uses. Deliberately
+   not stars: this is a two-colour press, and a star is a sticker from a different game. */
+.marks {
+  display: inline-flex;
+  gap: 4px;
+  flex: none;
+  align-items: center;
+}
+
+.mark {
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--key);
+  background: transparent;
+}
+
+.mark.on {
+  background: var(--red);
+}
+
+/* The third mark is the one worth chasing, so it reads differently when it lands. */
+.mark.on:nth-child(3) {
+  background: var(--blue);
+}
+
+.mastery {
+  margin-top: 12px;
+  padding: 10px 0;
+  border-top: 3px solid var(--key);
+  border-bottom: 3px solid var(--key);
+}
+
+.mastery-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.mastery-label {
+  font-family: var(--display);
+  font-size: 21px;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.mastery.gained .mastery-label {
+  color: var(--red);
+}
+
+.mastery-next {
+  font-size: 11.5px;
+  line-height: 1.4;
+  margin-top: 5px;
+}
+
+.mastery-total {
+  font-size: 12px;
+  line-height: 1.5;
+  margin-top: 14px;
+  padding-bottom: 10px;
+  border-bottom: 3px solid var(--key);
+}
+
+/* The level row grows a third column for its marks. */
+.level .marks {
+  margin-left: auto;
+  padding-left: 8px;
+}
+
 /* ---------- Accessibility ---------- */
 
 :focus-visible {

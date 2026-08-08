@@ -21,9 +21,13 @@ import {
   streakAtRisk,
   streakReward,
   levelsInWorld,
+  masteryInWorld,
   worldById,
   worldComplete,
   describeObjective,
+  MASTERY_TIERS,
+  describeMastery,
+  levelMastery,
   levelPassed,
   objectiveProgress,
   editionById,
@@ -31,10 +35,14 @@ import {
   loadSave,
   modifiersFor,
   modifiersForRun,
+  masteryOf,
+  nextMasteryAsk,
+  masteryTotal,
   nextGoal,
   saveSave,
   haulFor,
   settleContracts,
+  type RunSummary,
   type ScrapCredit,
   upgradeCost,
   type SaveData,
@@ -840,6 +848,11 @@ class Game {
     this.hud.classList.add("hidden");
     this.levelsEl.classList.remove("hidden");
 
+    const total = masteryTotal(this.save);
+    el("mastery-total").innerHTML =
+      `<b>${total.earned}</b> of ${total.possible} marks · ` +
+      `three per level: cleared, clean, and never on the wrong colour at a wall.`;
+
     const list = el("level-list");
     list.innerHTML = "";
 
@@ -855,10 +868,12 @@ class Game {
 
       const head = document.createElement("div");
       head.className = done ? "world-head done" : "world-head";
+      const wm = masteryInWorld(this.save, wd.id);
       head.innerHTML =
         `<div class="world-name">${wd.name}</div>` +
         `<div class="world-blurb">${unlocked ? wd.blurb : "Locked"}</div>` +
-        `<div class="world-count">${cleared}/${levels.length}${done ? ` · ${wd.seal} earned` : ""}</div>`;
+        `<div class="world-count">${cleared}/${levels.length}${done ? ` · ${wd.seal} earned` : ""}` +
+        `${unlocked ? ` · marks ${wm.earned}/${wm.possible}` : ""}</div>`;
       list.appendChild(head);
 
       if (!unlocked) continue;
@@ -875,10 +890,31 @@ class Game {
         const prize = lv.unlockEdition
           ? `+${lv.reward.toLocaleString()} · ${lv.unlockEdition} edition`
           : `+${lv.reward.toLocaleString()} scrap`;
+        // A cleared level stops advertising a prize it will never pay again and starts naming
+        // the mark still missing — which is the whole reason to open it a second time.
+        const tier = masteryOf(this.save, lv.n);
+        const marks = locked
+          ? ""
+          : `<span class="marks">${Array.from(
+              { length: MASTERY_TIERS },
+              (_, i) => `<span class="mark${i < tier ? " on" : ""}"></span>`,
+            ).join("")}</span>`;
+        const caption = locked
+          ? "LOCKED"
+          : !levelDone
+            ? prize
+            : tier >= MASTERY_TIERS
+              ? "Fully mastered"
+              : tier === 0
+                // Cleared before marks existed. The old save records that it was beaten and
+                // nothing about how, so the first mark has to be earned again rather than
+                // assumed — and the row has to say so, or it reads as a bug.
+                ? "Clear it again to start its marks"
+                : nextMasteryAsk(tier);
         btn.innerHTML =
           `<span class="level-n">${lv.n}</span>` +
           `<span class="level-body"><span class="level-goal">${describeObjective(lv)}</span>` +
-          `<div class="level-prize">${levelDone ? "COMPLETE" : locked ? "LOCKED" : prize}</div></span>`;
+          `<div class="level-prize">${caption}</div></span>${marks}`;
         btn.addEventListener("click", () => {
           this.levelIndex = i;
           this.isDaily = false;
@@ -1026,21 +1062,45 @@ class Game {
 
     // Campaign outcome, settled before the results sheet is written so the copy can lead with
     // it. A level is the clearest goal the player has; it should be the headline, not a note.
+    // One summary, built once. It was assembled separately for the level check and for the
+    // contracts, which is how `banked` and `score` came to be passed to different consumers
+    // under the same name — the trap the RunSummary doc already warns about.
+    const summary: RunSummary = {
+      score: record.score,
+      banked,
+      won: record.won,
+      absorbed: w.stats.absorbed,
+      pressEaten: w.stats.pressEaten,
+      collected: record.collected,
+      maxCombo: record.maxCombo,
+      actions: record.actions,
+      hits: record.hits,
+      wallsCrashed: w.stats.wallsCrashed,
+    };
+
     const level = this.levelIndex >= 0 ? LEVELS[this.levelIndex] : undefined;
     let levelCleared = false;
     let sealEarned = "";
+    let masteryTier = 0;
+    let masteryGained = false;
     if (level) {
-      const passed = levelPassed(level, {
-        score: record.score,
-        banked,
-        won: record.won,
-        absorbed: w.stats.absorbed,
-        pressEaten: w.stats.pressEaten,
-        collected: record.collected,
-        maxCombo: record.maxCombo,
-        actions: record.actions,
-        hits: record.hits,
-      });
+      const passed = levelPassed(level, summary);
+      /**
+       * Mastery is settled on *every* attempt, cleared or not, and on replays too.
+       *
+       * It is the reason to open a level you have already beaten — the one that survives a
+       * replay banking no scrap — so gating it behind the frontier would defeat the point.
+       * It only ever goes up.
+       */
+      masteryTier = levelMastery(level, summary);
+      const held = masteryOf(this.save, level.n);
+      if (masteryTier > held) {
+        this.save.levelMastery[String(level.n)] = masteryTier;
+        masteryGained = true;
+        this.analytics.track("level_mastered", { level: level.n, tier: masteryTier });
+      } else {
+        masteryTier = held;
+      }
       // Only the frontier level advances progress; replaying an earlier one pays nothing, so
       // the easiest level cannot be farmed for scrap.
       if (passed && this.levelIndex === this.save.levelsDone) {
@@ -1059,17 +1119,7 @@ class Game {
       this.analytics.track("run_end", { level: level.n, passed });
     }
 
-    const contractCredits = settleContracts(this.save, {
-      score: record.score,
-      banked,
-      won: record.won,
-      absorbed: w.stats.absorbed,
-      pressEaten: w.stats.pressEaten,
-      collected: record.collected,
-      maxCombo: record.maxCombo,
-      actions: record.actions,
-      hits: record.hits,
-    });
+    const contractCredits = settleContracts(this.save, summary);
     credits.push(...contractCredits);
     const completed = contractCredits.map((c) => `${c.label} — +${c.amount.toLocaleString()}`);
     saveSave(this.save);
@@ -1096,6 +1146,28 @@ class Game {
             ? "Banked early"
             : "Drone destroyed";
     el("result-score").textContent = String(record.score);
+
+    /**
+     * Mastery marks, on level runs only. Three filled pips is the goal; the caption names what
+     * the next one asks for, so a replay always has a stated reason rather than being a vague
+     * invitation to "try harder".
+     */
+    const masteryEl = el("result-mastery");
+    masteryEl.classList.toggle("hidden", !level);
+    if (level) {
+      const pips = Array.from(
+        { length: MASTERY_TIERS },
+        (_, i) => `<span class="mark${i < masteryTier ? " on" : ""}"></span>`,
+      ).join("");
+      const ask = nextMasteryAsk(masteryTier);
+      const label = masteryTier > 0 ? describeMastery(masteryTier) : "Not cleared";
+      masteryEl.innerHTML =
+        `<div class="mastery-row"><span class="marks">${pips}</span>` +
+        `<span class="mastery-label">${masteryGained ? `${label} — new` : label}</span></div>` +
+        (ask ? `<div class="mastery-next">Next: ${ask}</div>` : "") +
+        (masteryTier >= MASTERY_TIERS ? `<div class="mastery-next">Fully mastered.</div>` : "");
+      masteryEl.classList.toggle("gained", masteryGained);
+    }
     el("result-best").textContent =
       record.score > priorBest && prior.length > 0
         ? "New personal best"

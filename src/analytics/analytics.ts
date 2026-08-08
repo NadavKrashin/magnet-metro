@@ -40,6 +40,9 @@ export type EventName =
   | "first_run_completed"
   | "level_attempt"
   | "level_cleared"
+  // Which tier, on which level. The distribution of "perfect" marks is the clearest read
+  // there is on whether mastery is a goal people actually chase or a badge they ignore.
+  | "level_mastered"
   // Progression
   | "progress_reset"
   | "currency_earned"

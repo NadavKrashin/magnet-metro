@@ -181,6 +181,12 @@
             </dd>
             <dt>Seals</dt>
             <dd>Awarded for clearing an entire world of levels. Also not for sale.</dd>
+            <dt>Marks</dt>
+            <dd>
+              Three per level, and they cannot be bought either. One for clearing it, one for
+              clearing it without losing a cell, and one for doing that while never being on
+              the wrong colour at a gate or the Press. Seventy-two in total.
+            </dd>
           </dl>
 
           <div class="section-label">The three modes</div>
@@ -274,6 +280,7 @@
           <h2>Levels</h2>
           <p class="sub">Four worlds, twenty-four courses, one job each. Clear a whole world to earn its seal — seals and editions cannot be bought.</p>
           <p class="sub note-neutral">Every level is flown on a <b>stock drone</b>. Workshop upgrades do nothing here, so clearing one means the same for everyone. Spend your scrap on Free Run.</p>
+          <div id="mastery-total" class="mastery-total"></div>
           <div id="level-list" class="level-list"></div>
           <button id="btn-levels-close" class="wide primary">Back</button>
         </div>
@@ -312,6 +319,7 @@
           <h2 id="result-title">Run complete</h2>
           <div class="score-big"><span id="result-score">0</span></div>
           <div id="result-best" class="best"></div>
+          <div id="result-mastery" class="mastery hidden"></div>
           <table class="stats">
             <tbody id="result-stats"></tbody>
           </table>

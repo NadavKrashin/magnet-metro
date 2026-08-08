@@ -66,6 +66,7 @@ function play(level: LevelDef, mods: Modifiers) {
     maxCombo: world.stats.maxCombo,
     actions: world.stats.actions,
     hits: world.stats.hits,
+    wallsCrashed: 0,
   };
 }
 

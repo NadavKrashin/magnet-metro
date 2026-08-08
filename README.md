@@ -26,8 +26,8 @@ Everything below serves that thesis. Anything that does not is a candidate for c
 ```bash
 npm install
 npm run dev          # dev server; open the printed network URL on a phone
-npm run test         # sim, magnet, hazard, level, endless, opening, tour, economy,
-                     # onboarding, streak, record and anti-camping checks
+npm run test         # sim, magnet, hazard, level, endless, opening, tour, ending,
+                     # mastery, economy, onboarding, streak, record, anti-camping
 npm run balance      # difficulty and skill-expression report across 12 seeds
 npm run standalone   # one self-contained HTML file in dist/standalone.html (94 kB)
 npm run verify       # build, prove progress persists, screenshot, report frame time
@@ -121,6 +121,34 @@ So two things are campaign-only:
   tab is a display case, not a shop: locked ones name the level that grants them.
 - **Seals** — one per world, for clearing all six of its levels. They appear on the results
   sheet and cannot be earned any other way.
+
+### Three marks per level
+
+Twenty-four levels is not much content, and once cleared each one had nothing left to ask for.
+Making a replayed level bank no scrap sharpened that — it removed the only remaining reason to
+open one again. So every level carries **three marks** instead of a pass/fail tick, which turns
+twenty-four courses into seventy-two goals without authoring a single new course:
+
+1. **Cleared** — the level's own objective.
+2. **Clean** — cleared without losing a cell.
+3. **Perfect** — cleared, clean, and never on the wrong colour at a gate or the Press.
+
+The grades are deliberately **universal rather than per-level**. Twenty-four tightened targets
+would be twenty-four more hand-tuned numbers to keep reachable, and this table has already had
+to be re-tuned twice — once when colour gates landed and once when the closing Press stopped
+stacking. A rule with no numbers in it cannot go stale, and `test/mastery.test.ts` asserts that
+every one of the eight objective kinds can reach every mark on a single perfect run.
+
+The third mark is the one worth chasing, and it grades the thesis directly. Gates and the Press
+cost no cells, so a run can be spotless by the `hits` measure while having got every
+un-dodgeable wall on the course wrong — which is exactly the run this game says was played
+badly. "You were the right colour every single time" is what playing it well actually means.
+
+Marks pay **no scrap**. The economy is already tuned, and seals and editions have always been
+the axis money cannot touch; this belongs with them. Mastery is settled on every attempt,
+including replays and failures, and only ever goes up. A save written before marks existed
+starts them all at zero — nothing in it records whether those old clears were clean, and
+awarding marks nobody earned would devalue the whole thing.
 
 ### The campaign ignores the workshop
 

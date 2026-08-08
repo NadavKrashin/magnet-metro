@@ -246,6 +246,7 @@ export class World {
     pressEaten: 0,
     gatesEaten: 0,
     gatesCrashed: 0,
+    wallsCrashed: 0,
     missed: 0,
     missedWrongColour: 0,
     timeBlue: 0,
@@ -665,6 +666,7 @@ export class World {
    */
   private crashGate(h: Hazard): void {
     this.stats.gatesCrashed += 1;
+    this.stats.wallsCrashed += 1;
     this.combo = 0;
     // Long enough to cross one row, and nothing more. It is not invulnerability.
     this.crashCooldown = 0.4;
@@ -679,12 +681,24 @@ export class World {
       this.burst(item.x, item.y, 4, ink.key);
     }
     this.burst(h.x, h.y, 18, ink.key);
-    this.float(this.player.x, this.player.y + 4, "WRONG COLOUR", ink.key);
+    /**
+     * Name the cost, not the mistake.
+     *
+     * A gate never costs a cell, by design — they arrive every 230 units, and a frequent
+     * lethal wall raises the floor a beginner has to clear rather than the ceiling an expert
+     * plays against. Making the Press lethal once took naive first-run completion from 50% to
+     * zero. But this printed "WRONG COLOUR", which says a mistake happened and not what it
+     * took, while a real hit prints "-1 CELL". A play report came back as "when I hit a line
+     * barrier I don't get a life down" — the player could see the shake and read no price.
+     */
+    const held = lost > 0 ? ` · -${lost} HELD` : "";
+    this.float(this.player.x, this.player.y + 4, `MULTIPLIER LOST${held}`, ink.key);
     this.events?.onHit("gate");
   }
 
   /** Mismatching the press: it costs most of what you were carrying, but not a cell. */
   private crashPress(h: Hazard): void {
+    this.stats.wallsCrashed += 1;
     this.combo = 0;
     // Four rows deep, so the window has to span the whole structure.
     this.crashCooldown = 0.9;
@@ -699,7 +713,9 @@ export class World {
       this.burst(item.x, item.y, 4, ink.key);
     }
     this.burst(h.x, h.y, 26, ink.key);
-    this.float(this.player.x, this.player.y + 4, "WRONG COLOUR", ink.key);
+    // Same reasoning as the gate: say what it took. The Press bills far harder, so it says so.
+    const held = lost > 0 ? ` · -${lost} HELD` : "";
+    this.float(this.player.x, this.player.y + 4, `MULTIPLIER LOST${held}`, ink.key);
     this.events?.onHit("press");
   }
 

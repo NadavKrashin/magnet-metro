@@ -617,18 +617,35 @@ export class Renderer implements View {
       // contact, ringed in the ink just swallowed, fading out. Nothing else in the game is
       // round, bright and centred on the drone, so it cannot be mistaken for the flat dark
       // slab that damage prints.
+      /**
+       * The white core is kept small on purpose.
+       *
+       * This pass is drawn over everything, including the open rings that say which hazards
+       * are edible — and white is the one thing that destroys them. A ring is a mid-value
+       * colour stroke trapped in a hairline of black: wash both in white and the black stays
+       * obviously dark while the colour goes to near-paper, so the mark loses its colour and
+       * keeps its outline. Since the flash re-triggers on every block, a wall made the rings
+       * pulse between coloured and empty. That was reported as the circles "twitching —
+       * sometimes it shows correctly and others it shows just the borders".
+       *
+       * The ink stop therefore takes over almost immediately. The bloom is just as large and
+       * just as loud, but what floods the page is the colour that was swallowed rather than
+       * white, so it *reinforces* the colour rule instead of erasing it. Only a small hot
+       * point at the moment of contact blows out.
+       */
       const bloom = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
-      bloom.addColorStop(0, `rgba(255,255,255,${0.95 * world.absorbFlash})`);
-      bloom.addColorStop(0.3, `${world.absorbFlashInk}${alphaHex(0.8 * world.absorbFlash)}`);
+      bloom.addColorStop(0, `rgba(255,255,255,${0.9 * world.absorbFlash})`);
+      bloom.addColorStop(0.12, `${world.absorbFlashInk}${alphaHex(0.85 * world.absorbFlash)}`);
       bloom.addColorStop(1, `${world.absorbFlashInk}00`);
       ctx.fillStyle = bloom;
       ctx.beginPath();
       ctx.arc(cx, cy, r, 0, TAU);
       ctx.fill();
 
-      // And a light lift across the rest of the page, so the whole frame registers the moment
-      // without washing the course out.
-      ctx.globalAlpha = world.absorbFlash * (0.1 + swell * 0.16);
+      // And a light lift across the rest of the page, so the whole frame registers the moment.
+      // Deliberately slight: this one reaches rings the bloom never touches, and it is pure
+      // wash — it carries no reward at that distance, only lost colour.
+      ctx.globalAlpha = world.absorbFlash * (0.05 + swell * 0.07);
       ctx.fillStyle = ink.paper;
       ctx.fillRect(0, 0, this.cw, this.ch);
       ctx.restore();
