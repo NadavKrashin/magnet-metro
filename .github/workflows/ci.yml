@@ -63,8 +63,31 @@ jobs:
 
       # Only Chromium, and only its own dependencies. Installing every browser roughly triples
       # this step for engines the project never uses.
+      #
+      # Cached on the Playwright version rather than on the lockfile hash: the browser build a
+      # given Playwright expects is fixed, so any other dependency change would needlessly
+      # evict a 170 MB download that is still correct.
+      - name: Playwright version
+        id: playwright
+        run: echo "version=$(node -p "require('playwright/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Chromium
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+
       - name: Install Chromium
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps chromium
+
+      # The system libraries Chromium links against are installed by apt, not unpacked into the
+      # cached directory, so a cache hit restores the browser but not the things it needs to
+      # start. Skipping this would trade a slow job for one that fails on a missing .so.
+      - name: Install Chromium system libraries
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
 
       - name: Build single-file bundle
         run: npm run standalone
