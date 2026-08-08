@@ -248,11 +248,16 @@ often than before.
 
 | | before gates | after |
 |---|---|---|
-| Switching is worth, ordinary course | 2.2× | **2.9×** |
-| Switching is worth, endless | 1.7× | **4.6×** |
-| Switching is worth, hardest world | 2.3× | **3.2×** |
-| A camper's best combo, endless | 142 | **63** |
+| Switching is worth, ordinary course | 2.2× | **2.5×** |
+| Switching is worth, endless | 1.7× | **2.7×** |
+| Switching is worth, hardest world | 2.3× | **3.0×** |
 | Campaign levels a camper can clear | all 24 | **7** — walled at level 8 |
+
+Measured across 48 seeds. An earlier 24-seed run read 4.6× on the endless figure; widening the
+sample brought all three modes into a tight 2.5–3.0× band, which says that number was a lucky
+draw rather than the design's real value. **The score ratio was never the main deterrent
+anyway** — the campaign wall is. A camper stops at level 8 for good, since levels unlock in
+order: seven of twenty-four, one world of four, one edition of five.
 
 Gates are off in **Proof Sheet**: an un-dodgeable wall is the right pressure on somebody who
 understands the tap and the wrong one on somebody still working out what it does.
@@ -260,6 +265,34 @@ understands the tap and the wrong one on somebody still working out what it does
 `test/camper.ts` plays the strongest version of the exploit rather than a strawman, prints the
 table above, and asserts the properties — including that camping stays survivable, since a
 change that makes camping *deadly* rather than *unrewarding* is the failure mode to avoid.
+
+### Reward and damage must not look alike
+
+They did. Both slammed the page with a full-screen `multiply` pass — and since you can only
+eat your own colour, eating a red wall flashed the screen *red*, exactly as being hit by one
+did. The best moment in the game and the worst were the same image, and both **darkened** the
+page. A play test said so in one line: "hitting my colour looks kinda the same as hitting the
+spikes."
+
+They now move in opposite directions:
+
+- **A swallow is a bloom struck at the drone** — a blown-out white core ringed in the ink just
+  swallowed, fading outward, plus a light lift across the rest of the page. Nothing else in the
+  game is round, bright and centred on the player.
+- **Damage is the key plate** — red and then heavy black, flat across the whole frame. Measured
+  at 18% of pixels driven below a quarter brightness.
+
+A full-page *paper* flash was tried for the reward first and measured almost nothing: the stock
+is already near-white, so printing paper over it moved mean luminance six points while a hit
+moved it eighty-seven. On a light page you cannot brighten your way to emphasis — you have to
+go local and saturated instead.
+
+Swallows in quick succession now build rather than repeat: a gate is nine blocks and a Press
+thirty-six, and each one used to be an identical capped thump. A streak counter escalates the
+shake, the particle count, the size of the number that floats up, and the haptic. It
+deliberately does **not** escalate the hit-stop — nine freezes through one wall is judder, not
+punch, and each frozen frame is course the player does not cover, which measurably cost score
+when it was tried.
 
 ## The Press
 

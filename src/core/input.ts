@@ -33,6 +33,27 @@ export class Input {
 
   attach(el: HTMLElement): void {
     this.el = el;
+
+    /**
+     * iOS decides a long press means "select something" and raises a magnifying loupe and a
+     * Copy / Look Up bar over the game. Steering is a press held for the length of a run, so
+     * it triggers constantly — and once it appears it has the thumb, not the drone.
+     *
+     * The CSS (`-webkit-user-select`, `-webkit-touch-callout`) removes most of it, but not
+     * reliably enough on every iOS version, so the events are refused outright as well. The
+     * course-code field is exempted: it is the one place a long press should still work,
+     * because pasting a friend's code is the entire point of it.
+     */
+    const allowSelection = (target: EventTarget | null): boolean =>
+      target instanceof HTMLElement && !!target.closest("input, textarea");
+
+    document.addEventListener("contextmenu", (e) => {
+      if (!allowSelection(e.target)) e.preventDefault();
+    });
+    document.addEventListener("selectstart", (e) => {
+      if (!allowSelection(e.target)) e.preventDefault();
+    });
+
     el.addEventListener("pointerdown", this.onPointerDown);
     window.addEventListener("pointermove", this.onPointerMove);
     window.addEventListener("pointerup", this.onPointerUp);

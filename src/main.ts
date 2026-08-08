@@ -450,12 +450,25 @@ class Game {
       onCollect: (comboIndex) => this.audio.collect(comboIndex),
       onAbsorb: () => {
         this.audio.absorb();
-        haptics.absorb();
+        // A wall swallowed whole should not feel like one pellet nine times. Past a few in a
+        // row the hand gets the heavy tap instead of the medium one.
+        if (this.world.absorbStreak >= 4) haptics.pressCrash();
+        else haptics.absorb();
       },
       onHit: (kind) => {
         this.audio.hit();
-        if (kind === "press") haptics.pressCrash();
-        else haptics.hit();
+        if (kind === "cell") {
+          haptics.hit();
+          // The clearest possible statement that a life just went: the hull readout itself
+          // reacts. A full-screen flash is ambiguous — three different outcomes print one —
+          // but the pips are the thing that actually changed, so they are what should move.
+          this.integrityEl.classList.remove("lost");
+          void this.integrityEl.offsetWidth; // restart the animation on consecutive hits
+          this.integrityEl.classList.add("lost");
+        } else {
+          // A wall got wrong. Costs the haul, never a cell, and must not feel like one.
+          haptics.pressCrash();
+        }
       },
       onFlip: (toRed) => {
         this.audio.flip(toRed);
