@@ -739,6 +739,12 @@ export interface SaveData {
    * number the game can collect: the level where attempts pile up is the level people quit on.
    */
   levelAttempts: Record<string, number>;
+  /**
+   * Whether the first-run tour has been seen through, or skipped. Stored rather than derived
+   * from the run count, because a player who quits mid-tour on their first run has not been
+   * taught anything and should still get it on their second.
+   */
+  coached: boolean;
 }
 
 function emptySave(): SaveData {
@@ -761,6 +767,7 @@ function emptySave(): SaveData {
     endlessBestScore: 0,
     levelsDone: 0,
     levelAttempts: {},
+    coached: false,
   };
 }
 
@@ -788,6 +795,10 @@ export function loadSave(): SaveData {
       endlessBestScore: Number(parsed.endlessBestScore) || 0,
       levelsDone: Number(parsed.levelsDone) || 0,
       levelAttempts: parsed.levelAttempts ?? {},
+      // A save written before the tour existed belongs to someone who has already worked the
+      // interface out for themselves. Interrupting their next run to explain the score counter
+      // would be worse than never having built it, so only a genuinely blank slate is coached.
+      coached: parsed.coached ?? (Number(parsed.runs) || 0) > 0,
     };
   } catch {
     return emptySave();

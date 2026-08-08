@@ -60,6 +60,26 @@ export class Renderer implements View {
     this.bakeBackground();
   }
 
+  /**
+   * Where a world point sits on the *page*, in CSS pixels, with a CSS-pixel radius.
+   *
+   * `toScreenX`/`toScreenY` work in backing-store pixels, which are up to twice the CSS ones on
+   * a retina screen. Anything that positions a DOM element over the canvas — the first-run tour
+   * pointing at the drone — has to be given the page's own units or it lands at half height.
+   */
+  pageRect(worldX: number, worldY: number, worldR: number): {
+    x: number;
+    y: number;
+    r: number;
+  } {
+    const k = this.cw / (this.canvas.clientWidth || 1);
+    return {
+      x: this.toScreenX(worldX) / k,
+      y: this.toScreenY(worldY) / k,
+      r: (worldR * this.scale) / k,
+    };
+  }
+
   toScreenX(worldX: number): number {
     return this.cw / 2 + worldX * this.scale + this.shakeX;
   }

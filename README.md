@@ -26,8 +26,8 @@ Everything below serves that thesis. Anything that does not is a candidate for c
 ```bash
 npm install
 npm run dev          # dev server; open the printed network URL on a phone
-npm run test         # sim, magnet, hazard, level, endless, opening, economy, onboarding,
-                     # streak, record and anti-camping checks
+npm run test         # sim, magnet, hazard, level, endless, opening, tour, economy,
+                     # onboarding, streak, record and anti-camping checks
 npm run balance      # difficulty and skill-expression report across 12 seeds
 npm run standalone   # one self-contained HTML file in dist/standalone.html (94 kB)
 npm run verify       # build, prove progress persists, screenshot, report frame time
@@ -183,6 +183,42 @@ colour that steering cannot solve, which is the moment the tap is introduced; th
 red mines encountered while the player is *already* red, so their first meeting with a hazard
 is one they eat; then both colours at once, which turns the tap into a choice. The mine field
 still has a gap, so a player who has not understood yet survives anyway.
+
+### The vocabulary is taught separately from the rule
+
+Teaching by consequence covers the rule and nothing else. It cannot teach a player what the
+big number is called, that the number is *also* the currency, that the pips are lives, or that
+the ring around the drone is the thing doing the collecting. **Scrap, cells and magnet are not
+self-explanatory words**, and a player who never learns them cannot read the results sheet,
+the workshop or a contract — which is most of the reason to open the game again tomorrow.
+
+So a first run also carries a six-beat guided tour (`src/game/coach.ts`). Each beat freezes the
+run, draws a hard keyline around one real piece of the interface, and names it: the drone and
+its magnet, scrap, the multiplier, the charge indicator, the cells, the progress bar. It is
+skippable on every beat, it runs once, and it can be replayed from Settings.
+
+Two things make it a tour rather than a manual. It is spread across the whole 290-unit lesson
+rather than stacked at the start, and **every beat is positioned against what the course is
+about to do**: the charge indicator is named just before the wall that forces a tap, and the
+cells just before the first hazard, so each explanation is paid off within a second or two.
+
+The distances are measured against the generator, not read off `openingLesson`. Course
+generation starts sixty units ahead of the drone, so each branch of the lesson lands about
+sixty units further down the track than the number in its condition — which is how the first
+version ended up pointing at a score that still read `0` while calling it "the metal your
+magnet pulls in". `test/coach.test.ts` re-derives the first collectable, the first
+opposite-colour wall and the first hazard by flying the course, so the tour cannot drift out of
+step with a change to the opening.
+
+The permanent version of the same thing is **How to play**, on the menu: the whole rule in five
+lines, then every term the interface uses — scrap, multiplier, cells, magnet, charge, the bar,
+mines, gates, the Press, the workshop, contracts, editions, seals, the three modes and course
+codes. The tour is what a new player gets whether they want it or not, so it stays at six
+cards; the glossary is where the rest lives, for anyone who goes looking.
+
+Nothing here dims the screen. A press cannot print translucent ink and the rest of this
+interface is built on that, so the tour points with a keyline and an offset shadow instead of a
+grey wash — and it does not need one, because the simulation is frozen while a card is up.
 
 Three rules make this legible, and they were all corrections after the first play test:
 
@@ -503,8 +539,8 @@ src/render/      canvas renderer, print palette, paper texture
 src/audio/       synthesised music and effects
 src/ads/         AdMob, consent, ATT, pacing
 src/analytics/   event taxonomy and sinks
-test/            simulation, magnet, hazard, level-reachability, opening, onboarding,
-                 streak, record, camping, economy, balance harness
+test/            simulation, magnet, hazard, level-reachability, opening, guided tour,
+                 onboarding, streak, record, camping, economy, balance harness
 scripts/         single-file build, screenshots, marketing capture, icons
 ```
 

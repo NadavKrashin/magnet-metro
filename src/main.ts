@@ -39,6 +39,7 @@ import {
   upgradeCost,
   type SaveData,
 } from "./game/progression";
+import { COACH_STEPS, dueCoachStep } from "./game/coach";
 import { applyEdition } from "./render/palette";
 import { STORAGE_KEYS, storage } from "./game/storage";
 import { Analytics, DebugSink } from "./analytics/analytics";
@@ -91,7 +92,18 @@ function saveRuns(runs: RunRecord[]): void {
   }
 }
 
-type State = "menu" | "playing" | "results" | "shop" | "revive" | "levels" | "paused" | "settings";
+type State =
+  | "menu"
+  | "playing"
+  | "results"
+  | "shop"
+  | "revive"
+  | "levels"
+  | "paused"
+  | "settings"
+  | "howto"
+  /** A tour card is up. The simulation is frozen; the HUD keeps refreshing so it reads true. */
+  | "coaching";
 
 class Game {
   private renderer: Renderer;
@@ -137,6 +149,12 @@ class Game {
   private levelIndex = -1;
   /** True when the current run has no finish line. */
   private isEndless = false;
+  /** True while the current run is carrying the guided tour. */
+  private coaching = false;
+  /** How many tour beats this run has shown. The tour is strictly ordered, so a count is enough. */
+  private coachDone = 0;
+  /** The beat currently on screen, for the analytics funnel and for re-anchoring on resize. */
+  private coachStep = -1;
   private seedCode = randomCode(new Rng(Date.now() >>> 0));
 
   private hud = el("hud");
@@ -157,6 +175,10 @@ class Game {
   private pausedEl = el("paused");
   private settingsEl = el("settings");
   private objectiveEl = el("objective");
+  private howtoEl = el("howto");
+  private coachEl = el("coach");
+  private coachSpotEl = el("coach-spot");
+  private coachCardEl = el("coach-card");
 
   constructor() {
     const canvas = el<HTMLCanvasElement>("game");
@@ -229,6 +251,30 @@ class Game {
 
     el("btn-settings").addEventListener("click", () => this.showSettings());
     el("btn-settings-close").addEventListener("click", () => this.showMenu());
+
+    el("btn-howto").addEventListener("click", () => this.showHowTo());
+    el("btn-howto-close").addEventListener("click", () => this.showMenu());
+
+    // Anywhere on the overlay advances, so a thumb that lands beside the button still moves the
+    // tour forward. Skip is the one exception and says so.
+    this.coachEl.addEventListener("click", () => this.advanceCoach());
+    el("btn-coach-skip").addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.endCoach("skipped");
+    });
+
+    // Replaying it has to start a fresh run: the beats are pinned to positions inside the
+    // scripted opening, so there is nothing to point at from a menu.
+    el("btn-replay-tour").addEventListener("click", () => {
+      this.save.coached = false;
+      saveSave(this.save);
+      this.settingsEl.classList.add("hidden");
+      this.seedCode = randomCode(new Rng(Date.now() >>> 0));
+      this.isDaily = false;
+      this.levelIndex = -1;
+      this.isEndless = true;
+      this.startRun();
+    });
     el("btn-reset").addEventListener("click", () =>
       el("reset-confirm").classList.remove("hidden"),
     );
@@ -346,7 +392,145 @@ class Game {
   private onResize = (): void => {
     this.renderer.resize();
     this.world.setViewHeight(this.renderer.viewHeightWorld);
+    // A rotation or a keyboard appearing moves every anchor. A tour card left pointing at where
+    // the score counter used to be is worse than no card at all.
+    if (this.state === "coaching") this.placeCoach();
   };
+
+  // -------------------------------------------------------------------------
+  // The first-run tour
+  // -------------------------------------------------------------------------
+
+  /** Freeze the run and put a beat on screen, anchored to the thing it names. */
+  private showCoachStep(index: number): void {
+    const step = COACH_STEPS[index];
+    if (!step) return;
+    this.coachStep = index;
+    this.state = "coaching";
+    this.audio.stopMusic();
+
+    el("coach-count").textContent = `Step ${index + 1} of ${COACH_STEPS.length}`;
+    el("coach-title").textContent = step.title;
+    el("coach-body").innerHTML = step.body;
+    el("btn-coach-next").textContent =
+      index === COACH_STEPS.length - 1 ? "Let me play" : "Got it";
+    this.coachEl.classList.remove("hidden");
+    // Only measurable once it is laid out, which un-hiding it above has just made true.
+    this.placeCoach();
+
+    this.analytics.track("coach_step", { id: step.id, step: index + 1 });
+  }
+
+  /** Position the ring and the card against the live geometry of whatever this beat names. */
+  private placeCoach(): void {
+    const step = COACH_STEPS[this.coachStep];
+    if (!step) return;
+    const base = this.coachEl.getBoundingClientRect();
+    const pad = 6;
+
+    let x: number;
+    let y: number;
+    let w: number;
+    let h: number;
+    if (step.anchor === "") {
+      // The drone lives on the canvas, not in the document, so its box has to be derived from
+      // the world. The magnet's reach is what the first card is about, so that is what is ringed.
+      const canvas = this.renderer.canvas.getBoundingClientRect();
+      const p = this.renderer.pageRect(
+        this.world.player.x,
+        this.world.player.y,
+        this.world.field.radius,
+      );
+      const r = Math.max(30, p.r);
+      x = canvas.left - base.left + p.x - r;
+      y = canvas.top - base.top + p.y - r;
+      w = r * 2;
+      h = r * 2;
+    } else {
+      const a = el(step.anchor).getBoundingClientRect();
+      x = a.left - base.left - pad;
+      y = a.top - base.top - pad;
+      w = a.width + pad * 2;
+      h = a.height + pad * 2;
+    }
+
+    // Kept inside the frame. The magnet is wide enough to run off an edge whenever the drone
+    // is near one, and a ring with a missing side stops reading as a ring at all.
+    const edge = 3;
+    const right = Math.min(x + w, base.width - edge);
+    const bottom = Math.min(y + h, base.height - edge);
+    x = Math.max(x, edge);
+    y = Math.max(y, edge);
+    w = Math.max(12, right - x);
+    h = Math.max(12, bottom - y);
+
+    const spot = this.coachSpotEl.style;
+    spot.left = `${Math.round(x)}px`;
+    spot.top = `${Math.round(y)}px`;
+    spot.width = `${Math.round(w)}px`;
+    spot.height = `${Math.round(h)}px`;
+
+    // Below the anchor when there is room under it, above when there is not — the card must
+    // never sit on top of the thing it is pointing at.
+    const card = this.coachCardEl.getBoundingClientRect();
+    const margin = 14;
+    const below = y + h + margin;
+    const above = y - card.height - margin;
+    const top = below + card.height + margin <= base.height || above < margin ? below : above;
+    this.coachCardEl.style.top = `${Math.round(
+      Math.min(Math.max(top, margin), Math.max(margin, base.height - card.height - margin)),
+    )}px`;
+    this.coachCardEl.style.left = `${Math.round(
+      Math.min(
+        Math.max(x + w / 2 - card.width / 2, margin),
+        Math.max(margin, base.width - card.width - margin),
+      ),
+    )}px`;
+  }
+
+  private advanceCoach(): void {
+    if (this.state !== "coaching") return;
+    this.coachDone += 1;
+    if (this.coachDone >= COACH_STEPS.length) {
+      this.endCoach("finished");
+      return;
+    }
+    // Beats are due by distance, and several can come due while one card is up only if the
+    // player is somehow ahead of them — which cannot happen, since the run is frozen. So the
+    // next card is always shown by the update loop, and this just resumes.
+    this.resumeFromCoach();
+  }
+
+  private endCoach(how: "finished" | "skipped"): void {
+    this.coaching = false;
+    this.coachStep = -1;
+    this.save.coached = true;
+    saveSave(this.save);
+    this.analytics.track(how === "skipped" ? "coach_skipped" : "coach_finished", {
+      step: this.coachDone + 1,
+      of: COACH_STEPS.length,
+    });
+    this.resumeFromCoach();
+  }
+
+  private resumeFromCoach(): void {
+    this.coachEl.classList.add("hidden");
+    if (this.state !== "coaching") return;
+    this.state = "playing";
+    // The tap that dismissed the card must not also be read as a colour change, and a drag
+    // begun on the overlay must not be applied the instant the run resumes.
+    this.input.reset();
+    this.audio.startMusic();
+  }
+
+  private showHowTo(): void {
+    this.state = "howto";
+    this.menuEl.classList.add("hidden");
+    this.settingsEl.classList.add("hidden");
+    this.howtoEl.classList.remove("hidden");
+    this.howtoEl.scrollTop = 0;
+    this.analytics.track("howto_opened", {});
+  }
 
   private applyMute(muted: boolean): void {
     this.audio.setMuted(muted);
@@ -391,6 +575,10 @@ class Game {
   private startRun(): void {
     const lvl = this.levelIndex >= 0 ? LEVELS[this.levelIndex] : undefined;
     const wd = lvl ? worldById(lvl.world) : undefined;
+    // The tour's beats are pinned to positions inside the full scripted opening, so a run
+    // carrying it always gets the full opening — including a replay asked for from Settings by
+    // a player the compressed one would otherwise apply to.
+    const coachThisRun = !this.save.coached && !this.demo;
     this.world = new World(
       seedFromCode(this.seedCode),
       {
@@ -398,7 +586,7 @@ class Game {
         endless: this.isEndless,
         // Free Run only. A level, a daily or a shared course has to generate identically for
         // everyone who plays it, so their opening never depends on the player's save.
-        shortOpening: this.isEndless && this.knowsTheRule(),
+        shortOpening: this.isEndless && this.knowsTheRule() && !coachThisRun,
         // A world is the same generator run differently, so its character travels with the run.
         ...(wd
           ? {
@@ -422,6 +610,10 @@ class Game {
 
     this.revivedThisRun = false;
     this.quitRun = false;
+    this.coaching = coachThisRun;
+    this.coachDone = 0;
+    this.coachStep = -1;
+    this.coachEl.classList.add("hidden");
     this.autopilotState = newAutopilotState();
     this.analytics.noteRunStarted();
     const startingLevel = this.levelIndex >= 0 ? LEVELS[this.levelIndex] : undefined;
@@ -486,6 +678,7 @@ class Game {
 
     this.menuEl.classList.add("hidden");
     this.resultsEl.classList.add("hidden");
+    this.howtoEl.classList.add("hidden");
     this.hud.classList.remove("hidden");
   }
 
@@ -696,6 +889,8 @@ class Game {
     this.levelsEl.classList.add("hidden");
     this.settingsEl.classList.add("hidden");
     this.pausedEl.classList.add("hidden");
+    this.howtoEl.classList.add("hidden");
+    this.coachEl.classList.add("hidden");
     this.buildContracts();
     el("bank-value").textContent = this.save.scrap.toLocaleString();
 
@@ -742,6 +937,11 @@ class Game {
 
   private endRun(): void {
     this.state = "results";
+    // A run that ended part-way through the tour takes the rest of it with it. The remaining
+    // beats are pinned to positions this run will never reach again, and the flag is left
+    // alone so the next run picks the tour up from the top.
+    this.coaching = false;
+    this.coachEl.classList.add("hidden");
     const w = this.world;
     this.lastRunScore = w.score;
     this.lastRunEndless = this.isEndless;
@@ -1247,6 +1447,16 @@ class Game {
     this.active.update(this.world, input, dt);
     this.world.step(dt);
 
+    // Checked before the end-of-run branch, so a beat that comes due on the same step the run
+    // ends is dropped rather than opening a card over the results sheet.
+    if (this.coaching && this.world.phase === "running") {
+      const next = dueCoachStep(this.coachDone, this.world.player.y);
+      if (next >= 0) {
+        this.showCoachStep(next);
+        return;
+      }
+    }
+
     if (this.world.phase !== "running") {
       if (this.demo) {
         this.seedCode = randomCode(new Rng(Date.now() >>> 0));
@@ -1261,7 +1471,10 @@ class Game {
     this.active.draw?.(this.renderer.context, this.world, this.renderer);
     this.renderer.drawPostFx(this.world);
 
-    if (this.state !== "playing") return;
+    // Coaching keeps refreshing the HUD even though the run is frozen. The tour points at
+    // these elements, so they have to hold real values before the first card is drawn — on a
+    // stale HUD the opening beat would ring an empty box.
+    if (this.state !== "playing" && this.state !== "coaching") return;
     const w = this.world;
     this.scoreEl.textContent = String(w.score);
     const mult = w.multiplier;
@@ -1283,9 +1496,12 @@ class Game {
 
     // The prompt is authored by the mechanic against course position, so it always describes
     // whatever is on screen right now rather than running off a fixed timer.
+    // Held back while a tour card is up: the course's own prompt and the card are both large
+    // uppercase instructions, and two of them at once is noise rather than teaching.
+    const showHint = w.prompt.length > 0 && this.state === "playing";
     this.hintEl.textContent = w.prompt;
-    this.hintEl.classList.toggle("on", w.prompt.length > 0);
-    this.hintEl.classList.toggle("urgent", w.promptUrgent);
+    this.hintEl.classList.toggle("on", showHint);
+    this.hintEl.classList.toggle("urgent", showHint && w.promptUrgent);
 
     // The soundtrack is driven by how the run is going, not by a clock.
     this.audio.setIntensity(0.35 * w.progress + 0.65 * Math.min(1, w.combo / 40));
