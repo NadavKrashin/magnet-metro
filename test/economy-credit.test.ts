@@ -61,6 +61,7 @@ credits.push(
     actions: 12,
     maxCombo: 20,
     hits: 1,
+    wallsCrashed: 0,
   }),
 );
 

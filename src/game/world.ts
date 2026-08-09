@@ -78,7 +78,14 @@ export const BIG_VALUE = 50;
  */
 export interface WorldEvents {
   onCollect(comboIndex: number): void;
-  onAbsorb(): void;
+  /**
+   * A hazard swallowed. `streakIndex` is how many have gone down back to back, starting at 0 —
+   * a wall is one event with many beats, not many identical events, and the presentation needs
+   * to know where in the run it is to build rather than repeat.
+   */
+  onAbsorb(streakIndex: number): void;
+  /** The run of swallows ended. `count` is how many went down in it. */
+  onAbsorbEnd(count: number): void;
   /**
    * Something went wrong. A "cell" is a lost life; a "press" is mismatching the closing wall,
    * which costs the haul rather than the run — a different event that deserves to land
@@ -239,6 +246,7 @@ export class World {
     pressEaten: 0,
     gatesEaten: 0,
     gatesCrashed: 0,
+    wallsCrashed: 0,
     missed: 0,
     missedWrongColour: 0,
     timeBlue: 0,
@@ -270,6 +278,8 @@ export class World {
   private nextPressAt = COURSE_LENGTH * 0.72;
   /** Reset so a bounded world with mid-course Presses starts counting from the lesson's end. */
   private pressCursorInit = false;
+  /** Latches once the course's single closing wall has been laid down. */
+  private closingPressDone = false;
   private viewHeight = 142;
 
   /** Permanent upgrades bought in the shop. Defaults to an unmodified drone. */
@@ -371,6 +381,25 @@ export class World {
     this.prevX = this.player.x;
     this.prevY = this.player.y;
 
+    /*
+     * The run still ends the moment the line is crossed, and deliberately so.
+     *
+     * A play report said the results sheet arrived "before I complete all of the colours at
+     * the end", which reads like the finish needs to wait for the closing wall to finish being
+     * drawn in — and a bounded settle window was built for exactly that. It turned out to be
+     * inert: measured across all twenty-four levels it never held the run for a single frame,
+     * and never caught a block that would otherwise have been lost.
+     *
+     * The reason is that the report was a symptom of the stacked Presses above, not of the
+     * finish. Four walls filled the closing zone right up to 1500 and beyond, so the player
+     * genuinely was mid-swallow at the line, with an entire fourth wall drawn past it that
+     * could never be reached. With one wall the last row lands around 1400-1425 and there are
+     * seventy-odd units of empty run-out behind it — the swallow has already resolved.
+     *
+     * So the settle is gone rather than kept as insurance. It also quietly reordered these two
+     * checks so that crossing the line beat losing the last cell, which is a real change to
+     * what counts as a win, and not one worth making for a mechanism with nothing to show.
+     */
     if (this.integrity <= 0) this.phase = "lost";
     else if (!this.options.endless && this.player.y >= COURSE_LENGTH) this.phase = "won";
   }
@@ -608,7 +637,7 @@ export class World {
     if (this.absorbStreak === 1 || this.absorbStreak % 4 === 0) {
       this.float(h.x, h.y, `+${gained}`, color, 1 + swell * 1.1);
     }
-    this.events?.onAbsorb();
+    this.events?.onAbsorb(this.absorbStreak - 1);
   }
 
   /**
@@ -637,6 +666,7 @@ export class World {
    */
   private crashGate(h: Hazard): void {
     this.stats.gatesCrashed += 1;
+    this.stats.wallsCrashed += 1;
     this.combo = 0;
     // Long enough to cross one row, and nothing more. It is not invulnerability.
     this.crashCooldown = 0.4;
@@ -651,12 +681,24 @@ export class World {
       this.burst(item.x, item.y, 4, ink.key);
     }
     this.burst(h.x, h.y, 18, ink.key);
-    this.float(this.player.x, this.player.y + 4, "WRONG COLOUR", ink.key);
+    /**
+     * Name the cost, not the mistake.
+     *
+     * A gate never costs a cell, by design — they arrive every 230 units, and a frequent
+     * lethal wall raises the floor a beginner has to clear rather than the ceiling an expert
+     * plays against. Making the Press lethal once took naive first-run completion from 50% to
+     * zero. But this printed "WRONG COLOUR", which says a mistake happened and not what it
+     * took, while a real hit prints "-1 CELL". A play report came back as "when I hit a line
+     * barrier I don't get a life down" — the player could see the shake and read no price.
+     */
+    const held = lost > 0 ? ` · -${lost} HELD` : "";
+    this.float(this.player.x, this.player.y + 4, `MULTIPLIER LOST${held}`, ink.key);
     this.events?.onHit("gate");
   }
 
   /** Mismatching the press: it costs most of what you were carrying, but not a cell. */
   private crashPress(h: Hazard): void {
+    this.stats.wallsCrashed += 1;
     this.combo = 0;
     // Four rows deep, so the window has to span the whole structure.
     this.crashCooldown = 0.9;
@@ -671,7 +713,9 @@ export class World {
       this.burst(item.x, item.y, 4, ink.key);
     }
     this.burst(h.x, h.y, 26, ink.key);
-    this.float(this.player.x, this.player.y + 4, "WRONG COLOUR", ink.key);
+    // Same reasoning as the gate: say what it took. The Press bills far harder, so it says so.
+    const held = lost > 0 ? ` · -${lost} HELD` : "";
+    this.float(this.player.x, this.player.y + 4, `MULTIPLIER LOST${held}`, ink.key);
     this.events?.onHit("press");
   }
 
@@ -755,7 +799,12 @@ export class World {
     this.collectPulse = Math.max(0, this.collectPulse - dt * 4);
     if (this.absorbStreakTimer > 0) {
       this.absorbStreakTimer -= dt;
-      if (this.absorbStreakTimer <= 0) this.absorbStreak = 0;
+      if (this.absorbStreakTimer <= 0) {
+        // The wall is done. Resolve it on one chord rather than letting the last block trail
+        // off, which is what makes a Press feel like an ending rather than a stream.
+        if (this.absorbStreak > 0) this.events?.onAbsorbEnd(this.absorbStreak);
+        this.absorbStreak = 0;
+      }
     }
     this.hitFlash = Math.max(0, this.hitFlash - dt * 2.5);
     this.crashFlash = Math.max(0, this.crashFlash - dt * 3.2);
@@ -850,7 +899,29 @@ export class World {
           return this.press(y);
         }
       } else if (y >= COURSE_LENGTH - PRESS_ZONE) {
-        return this.press(y);
+        /**
+         * Exactly one closing wall, and then nothing.
+         *
+         * This branch used to have no latch, so it fired for every generator slot inside the
+         * 150-unit closing zone: a Press consumes 50 units, so four of them stacked at roughly
+         * 1370, 1420, 1470 and 1521 — all the same colour, because the polarity is fixed on
+         * the first one. That is not the ending the game is designed around. It made matching
+         * worth about a hundred free swallows and mismatching a punishment beat four times
+         * over, and the fourth wall began *past* the finish line, so it was drawn on screen
+         * and could never be played. Two separate play reports came out of it: that the end
+         * is "just a ton of my colour", and that the results sheet arrives before the wall is
+         * finished.
+         *
+         * The run-out after the wall is deliberately empty. The Press is the ending; anything
+         * following it is an anticlimax the player has to keep flying through.
+         */
+        if (!this.closingPressDone) {
+          this.closingPressDone = true;
+          return this.press(y);
+        }
+        // Jump the cursor past the end so the loop stops rather than emitting anything else.
+        // Costs no RNG draw, which is what keeps every seeded course identical to before.
+        return COURSE_LENGTH + 40 - y;
       }
     }
 

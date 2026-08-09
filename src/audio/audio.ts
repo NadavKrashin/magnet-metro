@@ -147,11 +147,51 @@ export class GameAudio {
     this.tone(freq, 0.11, "triangle", 0.16);
   }
 
-  /** Eating a matching wall. Deliberately the biggest sound in the game. */
-  absorb(): void {
-    this.tone(180, 0.42, "sine", 0.5, 42);
-    this.tone(ROOT_HZ * 2, 0.3, "square", 0.1, ROOT_HZ * 4);
-    this.noise(0.34, 0.4, 1800, 180);
+  /**
+   * Eating a matching hazard.
+   *
+   * This used to be one big sound played once per block, and both halves of that were wrong.
+   *
+   * The contour was a low tone sweeping *down* to 42 Hz over 0.42s under a noise burst sweeping
+   * down from 1800 to 180 — which is, note for note, the shape of `hit` below. Descending pitch
+   * plus descending noise is the universal vocabulary for damage, so the best moment in the
+   * game announced itself in the language of the worst one.
+   *
+   * And a wall is not one block. A Press is thirty-six and a gate is nine, so a swallow fired
+   * up to thirty-six overlapping 0.42-second low sweeps: not an impact but a sustained roar,
+   * indistinguishable from being hurt repeatedly. A play test reported exactly that — "when
+   * hitting my colour it still sounds and feels like a hit".
+   *
+   * So each block is now a short bright note that *climbs* through the run, the same ladder
+   * `collect` uses and the single most moreish device this genre has. Nine of them through a
+   * gate is an arpeggio; thirty-six through a Press is a rising fanfare.
+   */
+  absorb(index: number): void {
+    // Fifths and octaves rather than the pentatonic scale, so a long run stays consonant with
+    // the music instead of wandering out of key.
+    const step = [0, 7, 12, 19, 24][Math.min(4, Math.floor(index / 3))]!;
+    const detune = (index % 3) * 2;
+    this.tone(semitone(ROOT_HZ * 4, step + detune), 0.09, "triangle", 0.2);
+    // A little body under the first few, so the start of a wall still lands with weight.
+    if (index < 3) this.tone(semitone(ROOT_HZ, step), 0.16, "sine", 0.3);
+    // Bright, short, and sweeping *up* — the opposite of the damage burst.
+    this.noise(0.09, 0.16, 1400, 5200);
+  }
+
+  /**
+   * A whole wall gone. Fired once when the run of blocks ends, so the set piece resolves on a
+   * single big chord rather than trailing off.
+   */
+  absorbFinish(count: number): void {
+    const size = Math.min(1, count / 12);
+    [0, 7, 12].forEach((s, i) => {
+      window.setTimeout(
+        () => this.tone(semitone(ROOT_HZ * 4, s), 0.26, "triangle", 0.16 + size * 0.1),
+        i * 55,
+      );
+    });
+    this.tone(semitone(ROOT_HZ, 0), 0.4, "sine", 0.22 + size * 0.2);
+    this.noise(0.3, 0.14 + size * 0.12, 900, 4800);
   }
 
   hit(): void {

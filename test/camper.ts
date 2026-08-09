@@ -242,6 +242,7 @@ function campaignReach(): { campCleared: number; firstWall: number } {
         maxCombo: r.maxCombo,
         actions: r.actions,
         hits: r.hits,
+        wallsCrashed: 0,
       });
       if (mode === "camp") {
         if (passed) campCleared++;

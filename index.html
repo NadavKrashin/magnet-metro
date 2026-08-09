@@ -30,7 +30,7 @@
             <div id="integrity" class="integrity"></div>
           </div>
         </div>
-        <div class="progress"><div id="progress-fill"></div></div>
+        <div id="progress" class="progress"><div id="progress-fill"></div></div>
         <div id="objective" class="objective hidden">
           <span id="objective-text"></span>
           <span id="objective-progress"></span>
@@ -39,6 +39,21 @@
         <div id="charge" class="charge hidden">
           <span id="charge-shape" class="charge-shape"></span>
           <span class="charge-text">TAP TO CHANGE</span>
+        </div>
+      </div>
+
+      <!-- The first-run tour. Sits above the HUD so it can dim it and cut a hole for whatever
+           it is pointing at, and freezes the simulation while it is open. -->
+      <div id="coach" class="coach hidden">
+        <div id="coach-spot" class="coach-spot" aria-hidden="true"></div>
+        <div id="coach-card" class="coach-card" role="dialog" aria-modal="true">
+          <div id="coach-count" class="coach-count"></div>
+          <h3 id="coach-title"></h3>
+          <p id="coach-body"></p>
+          <div class="coach-actions">
+            <button id="btn-coach-skip" class="coach-skip" type="button">Skip the tour</button>
+            <button id="btn-coach-next" class="coach-next" type="button">Got it</button>
+          </div>
         </div>
       </div>
 
@@ -73,7 +88,138 @@
             <div id="contract-list"></div>
           </div>
 
+          <button id="btn-howto" class="wide quiet">How to play</button>
           <button id="btn-settings" class="wide quiet">Settings</button>
+        </div>
+      </div>
+
+      <!-- Everything the run itself cannot stop to explain. The first-run tour names the five
+           things on the HUD; this is where the rest of the vocabulary lives, permanently. -->
+      <div id="howto" class="screen hidden">
+        <div class="panel">
+          <h2>How to play</h2>
+
+          <div class="section-label">The whole rule</div>
+          <ul class="glossary">
+            <li><b>Drag anywhere</b> to fly the drone. You never touch the drone itself.</li>
+            <li><b>Tap anywhere</b> to change which colour you are.</li>
+            <li>Your colour <b>flies to you</b>. The other colour ignores you completely.</li>
+            <li>Fly into your own colour and you <b>swallow it</b> — hazards included.</li>
+            <li>Fly into the other colour and it <b>costs a cell</b>.</li>
+          </ul>
+
+          <div class="section-label">On the screen</div>
+          <dl class="glossary">
+            <dt>Scrap</dt>
+            <dd>
+              The metal you pull in — the big number, top left. It is your score for the run
+              <b>and</b> your money: everything you haul is banked and spent in the Workshop.
+            </dd>
+            <dt>Multiplier</dt>
+            <dd>
+              The <b>x1</b> beside the score. Collect without a break and it climbs; take a hit
+              and it resets. Most of a big score is the multiplier, not the pieces.
+            </dd>
+            <dt>Cells</dt>
+            <dd>
+              The pips, top right. Your lives — three to start. One goes each time you touch the
+              wrong colour. At zero the run ends.
+            </dd>
+            <dt>Magnet</dt>
+            <dd>
+              The ring drawn around the drone. Anything of your colour that enters it gets
+              pulled in. A wider magnet is the first upgrade worth owning.
+            </dd>
+            <dt>Charge</dt>
+            <dd>
+              The shape at the bottom: a blue circle or a red diamond, showing which colour you
+              currently are. Pieces on the course are printed in the same two shapes.
+            </dd>
+            <dt>The bar</dt>
+            <dd>
+              How far through the course you are. In a Free Run there is no finish line, so it
+              measures you against your own furthest distance instead.
+            </dd>
+          </dl>
+
+          <div class="section-label">On the course</div>
+          <dl class="glossary">
+            <dt>Mines</dt>
+            <dd>
+              Spiked pieces. Match their colour and you eat them for a large bonus; mismatch and
+              they cost a cell.
+            </dd>
+            <dt>Gates</dt>
+            <dd>
+              A full-width row with no gap, in one colour. You cannot steer around a gate — you
+              have to <b>be</b> the right colour. Getting one wrong never costs a cell, but it
+              wipes your multiplier and scatters part of what you are carrying.
+            </dd>
+            <dt>The Press</dt>
+            <dd>
+              The wall at the end of a course: four solid rows of one colour, telegraphed well
+              ahead. Match it and you swallow the lot — the biggest single payout in the game.
+            </dd>
+          </dl>
+
+          <div class="section-label">Where the scrap goes</div>
+          <dl class="glossary">
+            <dt>Workshop</dt>
+            <dd>
+              Where scrap is spent: a wider magnet, more cells, sharper steering, a faster
+              multiplier, more value per piece. <b>Upgrades apply to Free Run only.</b>
+            </dd>
+            <dt>Contracts</dt>
+            <dd>
+              Standing jobs on the menu — "swallow 8 mines", and so on. They pay out on their
+              own and replace themselves when finished.
+            </dd>
+            <dt>Editions</dt>
+            <dd>
+              Palette swaps — different paper, different inks. They are <b>earned</b> by clearing
+              particular levels and can never be bought.
+            </dd>
+            <dt>Seals</dt>
+            <dd>Awarded for clearing an entire world of levels. Also not for sale.</dd>
+            <dt>Marks</dt>
+            <dd>
+              Three per level, and they cannot be bought either. One for clearing it, one for
+              clearing it without losing a cell, and one for doing that while never being on
+              the wrong colour at a gate or the Press. Seventy-two in total.
+            </dd>
+          </dl>
+
+          <div class="section-label">The three modes</div>
+          <dl class="glossary">
+            <dt>Free Run</dt>
+            <dd>
+              No finish line. It speeds up until it kills you, and the only target is your own
+              furthest distance. This is the mode your upgrades are for.
+            </dd>
+            <dt>Levels</dt>
+            <dd>
+              Twenty-four fixed courses in four worlds, each with one named job. Every one is
+              flown on a <b>stock drone</b> — upgrades do nothing here, so clearing a level means
+              the same thing for everyone.
+            </dd>
+            <dt>Today's Run</dt>
+            <dd>
+              One course a day, identical for every player. Turn up on consecutive days and the
+              streak bonus grows.
+            </dd>
+          </dl>
+
+          <div class="section-label">Sharing a run</div>
+          <dl class="glossary">
+            <dt>Course code</dt>
+            <dd>
+              Every course is built from a short code, so the same code always builds the same
+              course. Share yours and a friend can play the exact run you played — paste one
+              into Settings to take somebody else's.
+            </dd>
+          </dl>
+
+          <button id="btn-howto-close" class="wide primary">Back</button>
         </div>
       </div>
 
@@ -112,6 +258,7 @@
             />
             <button id="btn-code-go" class="primary">Go</button>
           </div>
+          <button id="btn-replay-tour" class="wide quiet">Replay the tutorial</button>
           <button id="btn-privacy" class="wide quiet hidden">Privacy choices</button>
           <button id="btn-policy" class="wide quiet hidden">Privacy policy</button>
           <button id="btn-reset" class="wide quiet">Reset all progress</button>
@@ -133,6 +280,7 @@
           <h2>Levels</h2>
           <p class="sub">Four worlds, twenty-four courses, one job each. Clear a whole world to earn its seal — seals and editions cannot be bought.</p>
           <p class="sub note-neutral">Every level is flown on a <b>stock drone</b>. Workshop upgrades do nothing here, so clearing one means the same for everyone. Spend your scrap on Free Run.</p>
+          <div id="mastery-total" class="mastery-total"></div>
           <div id="level-list" class="level-list"></div>
           <button id="btn-levels-close" class="wide primary">Back</button>
         </div>
@@ -171,6 +319,7 @@
           <h2 id="result-title">Run complete</h2>
           <div class="score-big"><span id="result-score">0</span></div>
           <div id="result-best" class="best"></div>
+          <div id="result-mastery" class="mastery hidden"></div>
           <table class="stats">
             <tbody id="result-stats"></tbody>
           </table>

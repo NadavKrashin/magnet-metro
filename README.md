@@ -26,8 +26,8 @@ Everything below serves that thesis. Anything that does not is a candidate for c
 ```bash
 npm install
 npm run dev          # dev server; open the printed network URL on a phone
-npm run test         # sim, magnet, hazard, level, endless, opening, economy, onboarding,
-                     # streak, record and anti-camping checks
+npm run test         # sim, magnet, hazard, level, endless, opening, tour, ending,
+                     # mastery, economy, onboarding, streak, record, anti-camping
 npm run balance      # difficulty and skill-expression report across 12 seeds
 npm run standalone   # one self-contained HTML file in dist/standalone.html (94 kB)
 npm run verify       # build, prove progress persists, screenshot, report frame time
@@ -122,6 +122,34 @@ So two things are campaign-only:
 - **Seals** — one per world, for clearing all six of its levels. They appear on the results
   sheet and cannot be earned any other way.
 
+### Three marks per level
+
+Twenty-four levels is not much content, and once cleared each one had nothing left to ask for.
+Making a replayed level bank no scrap sharpened that — it removed the only remaining reason to
+open one again. So every level carries **three marks** instead of a pass/fail tick, which turns
+twenty-four courses into seventy-two goals without authoring a single new course:
+
+1. **Cleared** — the level's own objective.
+2. **Clean** — cleared without losing a cell.
+3. **Perfect** — cleared, clean, and never on the wrong colour at a gate or the Press.
+
+The grades are deliberately **universal rather than per-level**. Twenty-four tightened targets
+would be twenty-four more hand-tuned numbers to keep reachable, and this table has already had
+to be re-tuned twice — once when colour gates landed and once when the closing Press stopped
+stacking. A rule with no numbers in it cannot go stale, and `test/mastery.test.ts` asserts that
+every one of the eight objective kinds can reach every mark on a single perfect run.
+
+The third mark is the one worth chasing, and it grades the thesis directly. Gates and the Press
+cost no cells, so a run can be spotless by the `hits` measure while having got every
+un-dodgeable wall on the course wrong — which is exactly the run this game says was played
+badly. "You were the right colour every single time" is what playing it well actually means.
+
+Marks pay **no scrap**. The economy is already tuned, and seals and editions have always been
+the axis money cannot touch; this belongs with them. Mastery is settled on every attempt,
+including replays and failures, and only ever goes up. A save written before marks existed
+starts them all at zero — nothing in it records whether those old clears were clean, and
+awarding marks nobody earned would devalue the whole thing.
+
 ### The campaign ignores the workshop
 
 **Every level is flown on a stock drone**, whatever has been bought. A level is a fixed course
@@ -183,6 +211,42 @@ colour that steering cannot solve, which is the moment the tap is introduced; th
 red mines encountered while the player is *already* red, so their first meeting with a hazard
 is one they eat; then both colours at once, which turns the tap into a choice. The mine field
 still has a gap, so a player who has not understood yet survives anyway.
+
+### The vocabulary is taught separately from the rule
+
+Teaching by consequence covers the rule and nothing else. It cannot teach a player what the
+big number is called, that the number is *also* the currency, that the pips are lives, or that
+the ring around the drone is the thing doing the collecting. **Scrap, cells and magnet are not
+self-explanatory words**, and a player who never learns them cannot read the results sheet,
+the workshop or a contract — which is most of the reason to open the game again tomorrow.
+
+So a first run also carries a six-beat guided tour (`src/game/coach.ts`). Each beat freezes the
+run, draws a hard keyline around one real piece of the interface, and names it: the drone and
+its magnet, scrap, the multiplier, the charge indicator, the cells, the progress bar. It is
+skippable on every beat, it runs once, and it can be replayed from Settings.
+
+Two things make it a tour rather than a manual. It is spread across the whole 290-unit lesson
+rather than stacked at the start, and **every beat is positioned against what the course is
+about to do**: the charge indicator is named just before the wall that forces a tap, and the
+cells just before the first hazard, so each explanation is paid off within a second or two.
+
+The distances are measured against the generator, not read off `openingLesson`. Course
+generation starts sixty units ahead of the drone, so each branch of the lesson lands about
+sixty units further down the track than the number in its condition — which is how the first
+version ended up pointing at a score that still read `0` while calling it "the metal your
+magnet pulls in". `test/coach.test.ts` re-derives the first collectable, the first
+opposite-colour wall and the first hazard by flying the course, so the tour cannot drift out of
+step with a change to the opening.
+
+The permanent version of the same thing is **How to play**, on the menu: the whole rule in five
+lines, then every term the interface uses — scrap, multiplier, cells, magnet, charge, the bar,
+mines, gates, the Press, the workshop, contracts, editions, seals, the three modes and course
+codes. The tour is what a new player gets whether they want it or not, so it stays at six
+cards; the glossary is where the rest lives, for anyone who goes looking.
+
+Nothing here dims the screen. A press cannot print translucent ink and the rest of this
+interface is built on that, so the tour points with a keyline and an offset shadow instead of a
+grey wash — and it does not need one, because the simulation is frozen while a card is up.
 
 Three rules make this legible, and they were all corrections after the first play test:
 
@@ -282,14 +346,26 @@ They now move in opposite directions:
 - **Damage is the key plate** — red and then heavy black, flat across the whole frame. Measured
   at 18% of pixels driven below a quarter brightness.
 
+**A matching hazard is drawn as an open ring**, not a disc — a play test could not tell solid
+edible hazards apart from large scrap, and misreading one as the other is the difference
+between eating a wall and flinching away from it. The colour plate has to be the loudest thing
+in that mark, because it is what says "food, *and* it is the colour you currently are". It was
+a thin stroke between two key rings, and a later report asked whether the rings "are supposed
+to be with no colours". They are not: Riot's teal sits 0.32 from its own black in plain RGB
+distance and Nightshift's aubergine 0.26, so on those two editions three concentric rings
+resolved into one grey object. The colour stroke is now roughly twice as heavy and the inner
+key ring is gone — it added black *inside* the colour and carried nothing the outer trap does
+not. That is 55% more colour ink against 32% less key, and the colour-to-key ratio goes from
+2.1 to 4.8.
+
 A full-page *paper* flash was tried for the reward first and measured almost nothing: the stock
 is already near-white, so printing paper over it moved mean luminance six points while a hit
 moved it eighty-seven. On a light page you cannot brighten your way to emphasis — you have to
 go local and saturated instead.
 
-Swallows in quick succession now build rather than repeat: a gate is nine blocks and a Press
+Swallows in quick succession build rather than repeat: a gate is nine blocks and a Press
 thirty-six, and each one used to be an identical capped thump. A streak counter escalates the
-shake, the particle count, the size of the number that floats up, and the haptic. It
+shake, the particle count, the size of the number that floats up, the note, and the haptic. It
 deliberately does **not** escalate the hit-stop — nine freezes through one wall is judder, not
 punch, and each frozen frame is course the player does not cover, which measurably cost score
 when it was tried.
@@ -307,6 +383,33 @@ naive first-run completion from 50% to zero. Rebuilt to cost only the chain, it 
 experts get an enormous swing. A course that simply stops at a distance marker has no shape;
 this gives every run a climax.
 
+### One wall, not four
+
+The closing branch of the generator had no latch, so it emitted a Press for **every** slot in
+the 150-unit closing zone. A Press consumes 50 units, so four identical walls stacked at
+roughly 1370, 1420, 1470 and 1521 — all the same colour, because the polarity is fixed on the
+first one.
+
+That broke the ending in two directions at once, and both were reported from play. Matching
+them was around a hundred free swallows in the last four seconds, which quietly decided every
+swallow objective before the course had started: level 5 asked for fourteen while the ending
+alone handed over twenty-four. And the fourth wall began past the 1500-unit finish line, so it
+was drawn on screen and could never be reached — the results sheet arrived over a wall the
+player was still looking at.
+
+The fix is a latch: one wall, and an empty run-out behind it. It costs no RNG draw, so every
+seeded course still builds identically — but the ending now pays about eight swallows instead
+of a hundred, and five level targets came down to match what the autopilot actually reaches.
+`test/ending.test.ts` pins the wall to four rows of nine, entirely inside the course, with
+nothing generated past the line.
+
+A bounded settle window at the finish was built alongside this, to hold the run open while the
+last blocks were drawn in. Measured across all twenty-four levels it never held for a single
+frame — with one wall the swallow has already resolved by the line — so it was removed rather
+than kept as insurance. It also reordered the win and loss checks, which changes what counts
+as a cleared course, and that is not a change worth making for a mechanism with nothing to
+show for itself.
+
 ## Coming back tomorrow
 
 **Today's Run** is one course per calendar day, identical for everyone, seeded from the UTC
@@ -321,13 +424,34 @@ playing well. Replaying today's course cannot pay twice. It needs no server: the
 knows what day it last played. `test/streak.test.ts` covers the arithmetic that is wrong in
 silence — month, year and leap-day boundaries, gaps, replays, and the at-risk window.
 
-**Contracts** are three rotating objectives that ask for a specific behaviour — swallow thirty
-mines, finish without losing a cell, hold a chain of sixty. They pay in the same scrap the
-shop spends, so they feed the existing loop rather than introducing a second currency. A new
-save opens with a one-off **starter** contract sized to finish in two ordinary runs, which is
-never drawn again.
+**Contracts** are three rotating objectives that ask for a specific behaviour — swallow
+forty-five mines, finish three courses clean, hold a chain of sixty in three runs. They pay in
+the same scrap the shop spends, so they feed the existing loop rather than introducing a second
+currency. A new save opens with a one-off **starter** contract sized to finish in two ordinary
+runs, which is never drawn again.
+
+**Every standing contract takes several runs**, and that was not always true. Three of them had
+a target of 1 — one clean course, one run with a chain of sixty, one run pulling in 140 — and
+paid 3,000 to 5,000 each. Three are active at a time and an ordinary course satisfies all
+three, so a "contract" was really a per-run bonus of eight to twelve thousand that refilled and
+paid again immediately. Measured, six levels paid **57,435 against a 240,406 shop** — a quarter
+of everything for sale, in six runs — and 39,600 of that was contracts against 12,635 of actual
+run haul. A play report put it in one line: five levels, fifty thousand scrap, enough to buy
+most of the store.
+
+Targets are now multi-run and rewards are around one good run's haul rather than five. The same
+six levels pay 25,235, and `test/economy.test.ts` asserts the properties rather than the
+numbers: no standing contract can be finished in a single run, none pays more than a good run,
+and three landing at once is under 5% of the shop.
 
 ## Progression: workshop, upgrades, editions
+
+**Replaying a cleared level pays nothing.** The level *bonus* was frontier-only from the start,
+on the stated grounds that the easiest level cannot be farmed for scrap — but the run's own
+haul was banked unconditionally, so the rule was not true. Level 1 takes about thirty seconds
+and banks a little over two thousand: the whole shop in a couple of hours of replaying the
+first course in the game. The rewarded "double it" offer follows the same rule, since doubling
+a share of zero is not an offer worth making.
 
 Everything scored in a run is banked as scrap and spent in the workshop. The point is to give
 a 30-second run consequences that outlive it — a run that only produces a number is finished
@@ -439,6 +563,28 @@ arrives on a strong combo, so the soundtrack builds as they build and thins out 
 hit. Collection blips climb a pentatonic ladder as the combo rises. That coupling between
 performance and score is most of why an arcade game feels exciting.
 
+### Swallowing had to stop sounding like damage
+
+A play test reported that eating your own colour "still sounds and feels like a hit", and both
+halves of that were true for the same two reasons.
+
+**The contour was wrong.** The swallow was a tone sweeping *down* to 42 Hz under a noise burst
+sweeping down from 1800 to 180 — which is, note for note, the shape of the damage sound sitting
+next to it in the same file. Descending pitch under descending noise is the universal
+vocabulary for being hurt, so the best moment in the game was announcing itself in the language
+of the worst one.
+
+**And a wall is not one block.** It fired once per block, so a Press was up to thirty-six
+overlapping 0.42-second low sweeps: not an impact but a sustained roar. The haptics were worse
+— a Medium impact per block, and past a run of four the *press-crash* buzz, so the payoff
+reached the thumb as thirty-six pulses of the pattern that means damage.
+
+Each block is now a short bright note climbing through the run, the same ladder the collection
+blips use, resolving on one chord when the wall is finished. The hand gets a light tap rate
+limited to 90 ms — closer than that and a haptic motor cannot strike and settle, so the beats
+smear into one long buzz — and an ascending two-beat roll at the end, which is the one thing in
+the vocabulary a single heavy thud can never be mistaken for.
+
 ## Performance
 
 The print look is composite-heavy, so it was profiled rather than assumed. Frame time in a
@@ -503,8 +649,8 @@ src/render/      canvas renderer, print palette, paper texture
 src/audio/       synthesised music and effects
 src/ads/         AdMob, consent, ATT, pacing
 src/analytics/   event taxonomy and sinks
-test/            simulation, magnet, hazard, level-reachability, opening, onboarding,
-                 streak, record, camping, economy, balance harness
+test/            simulation, magnet, hazard, level-reachability, opening, guided tour,
+                 onboarding, streak, record, camping, economy, balance harness
 scripts/         single-file build, screenshots, marketing capture, icons
 ```
 

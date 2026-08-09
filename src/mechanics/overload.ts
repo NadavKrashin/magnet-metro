@@ -56,7 +56,7 @@ export class OverloadMechanic implements Mechanic {
         world.hitStop = Math.max(world.hitStop, 0.05 * this.charge);
         world.absorbFlash = this.charge;
         world.absorbFlashInk = ink.red;
-        world.events?.onAbsorb();
+        world.events?.onAbsorb(0);
       }
       this.charge = 0;
     }

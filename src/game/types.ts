@@ -119,6 +119,15 @@ export interface RunStats {
   gatesEaten: number;
   /** Colour gates crashed into on the wrong colour. */
   gatesCrashed: number;
+  /**
+   * Every un-dodgeable wall met on the wrong colour — gates and the Press together.
+   *
+   * Neither costs a cell, so `hits` says nothing about them, and a run can be flawless by that
+   * measure while having got every wall in the course wrong. Mastery is graded on this: the
+   * game's whole thesis is that you become the thing that can eat the wall, so "never got one
+   * wrong" is the honest expression of playing it well.
+   */
+  wallsCrashed: number;
   missed: number;
   /**
    * Scrap value that could not be collected because it was the other colour when it went

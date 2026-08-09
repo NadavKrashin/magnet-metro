@@ -48,6 +48,29 @@ export function scrapFromScore(score: number, endless = false): number {
   return Math.round(effective * SCRAP_RATE);
 }
 
+/**
+ * What a finished run actually banks.
+ *
+ * Replaying a level you have already cleared pays nothing. The level *bonus* was frontier-only
+ * from the start, on the stated grounds that the easiest level cannot be farmed for scrap — but
+ * the run's own haul was paid unconditionally, so the rule was not true. Level 1 takes about
+ * thirty seconds and banks a little over two thousand: the entire shop in a couple of hours of
+ * replaying the first course in the game. Beating a cleared level again is worth doing for a
+ * better time or a cleaner run, not for money.
+ *
+ * `levelIndex` is the index into LEVELS, or -1 for a free run, a daily or a shared course —
+ * none of which can be farmed, because none of them is the same course twice.
+ */
+export function haulFor(
+  save: SaveData,
+  levelIndex: number,
+  score: number,
+  endless: boolean,
+): number {
+  if (levelIndex >= 0 && levelIndex < save.levelsDone) return 0;
+  return scrapFromScore(score, endless);
+}
+
 export interface Modifiers {
   /** Added to the mechanic's base field radius, in world units. */
   fieldRadiusBonus: number;
@@ -325,6 +348,8 @@ export interface RunSummary {
   pressEaten: number;
   collected: number;
   maxCombo: number;
+  /** Un-dodgeable walls met on the wrong colour. Neither costs a cell, so `hits` misses them. */
+  wallsCrashed: number;
   actions: number;
   hits: number;
 }
@@ -362,46 +387,63 @@ export const CONTRACTS: ContractDef[] = [
     starter: true,
     measure: (r) => r.absorbed,
   },
+  /*
+   * Three of these used to have a target of 1 — a single clean course, a single run with a
+   * chain of 60, a single run pulling in 140 — and paid 3,000 to 5,000 each. Three are active
+   * at a time and an ordinary course satisfies all three, so a completed contract was not a
+   * standing goal at all: it was a per-run bonus of eight to twelve thousand, which then
+   * refilled and paid again on the very next run.
+   *
+   * Measured, six levels paid 57,435 scrap against a 240,406 shop — a quarter of everything
+   * for sale, in six runs — and 39,600 of that came from contracts alone, against 12,635 of
+   * actual run haul. A play report put it in one line: five levels, fifty thousand scrap,
+   * enough to buy most of the store.
+   *
+   * So every target is now multi-run and every reward is around one good run's haul rather
+   * than five. A contract should be worth roughly as much as playing well for a run, not
+   * several times more — otherwise the haul, which is the thing skill actually moves, stops
+   * mattering.
+   */
   {
     id: "swallow",
     text: "Swallow mines in your own colour",
-    target: 30,
-    reward: 3500,
+    target: 45,
+    reward: 2200,
     measure: (r) => r.absorbed,
   },
   {
     id: "haul",
     text: "Bank scrap",
-    target: 8000,
-    reward: 4000,
+    target: 15000,
+    reward: 2400,
     measure: (r) => r.banked,
   },
   {
     id: "finish",
     text: "Reach the end of a course",
-    target: 3,
-    reward: 3000,
+    target: 6,
+    reward: 2000,
     measure: (r) => (r.won ? 1 : 0),
   },
   {
     id: "flawless",
-    text: "Finish a course without losing a cell",
-    target: 1,
-    reward: 5000,
+    text: "Finish 3 courses without losing a cell",
+    target: 3,
+    reward: 2600,
     measure: (r) => (r.won && r.hits === 0 ? 1 : 0),
   },
   {
     id: "chain",
-    text: "Hold a chain of 60 in one run",
-    target: 1,
-    reward: 3500,
+    text: "Hold a chain of 60, in 3 runs",
+    target: 3,
+    reward: 2200,
     measure: (r) => (r.maxCombo >= 60 ? 1 : 0),
   },
   {
     id: "pickup",
-    text: "Pull in 140 pieces in one run",
-    target: 1,
-    reward: 3000,
+    text: "Pull in 140 pieces, in 3 runs",
+    target: 3,
+    reward: 2000,
     measure: (r) => (r.collected >= 140 ? 1 : 0),
   },
 ];
@@ -572,6 +614,20 @@ export interface LevelDef {
  * at all; later ones may require them, because that is what makes the shop matter. A target
  * nobody can reach is the one outcome the test refuses.
  */
+/*
+ * Five targets came down when the closing zone stopped stacking Presses — 9, 14, 18, 21 and 23.
+ *
+ * The generator used to emit a Press for every slot inside the 150-unit closing zone, which
+ * put four identical walls back to back at the end of every course. A player who matched them
+ * banked something like a hundred free swallows in the last four seconds, and the targets had
+ * quietly been tuned around that: level 5 asked for fourteen swallows while the ending alone
+ * handed over twenty-four, so the objective was decided before the course had begun. A play
+ * report put it plainly — "it's so easy since the end is just a ton of my colour".
+ *
+ * With one wall the ending pays about eight. These numbers are what the autopilot actually
+ * reaches on a stock drone now, and the swallow objectives once again have to be met by
+ * playing the course rather than by turning up to the finish on the right colour.
+ */
 export const LEVELS: LevelDef[] = [
   // Proof Sheet — learn the rule, no upgrades assumed.
   { n: 1, world: "proof", seed: "LVL-0001", kind: "finish", target: 1, reward: 400 },
@@ -587,28 +643,28 @@ export const LEVELS: LevelDef[] = [
   // Press targets re-tuned when colour gates landed: a course now asks the player to match
   // several walls on the way to the Press, so they arrive lined up less often than they did
   // when the closing wall was the only thing worth matching.
-  { n: 9, world: "nightshift", seed: "LVL-0009", kind: "press", target: 9, reward: 1700 },
+  { n: 9, world: "nightshift", seed: "LVL-0009", kind: "press", target: 6, reward: 1700 },
   { n: 10, world: "nightshift", seed: "LVL-0010", kind: "collect", target: 110, reward: 1900 },
   { n: 11, world: "nightshift", seed: "LVL-0011", kind: "score", target: 22000, reward: 2100 },
   { n: 12, world: "nightshift", seed: "LVL-0012", kind: "flawless", target: 1, reward: 2600, unlockEdition: "nightshift" },
 
   // Overprint — the screen is busy and the gaps are thin.
   { n: 13, world: "overprint", seed: "LVL-0013", kind: "finish", target: 1, reward: 1800 },
-  { n: 14, world: "overprint", seed: "LVL-0014", kind: "absorb", target: 20, reward: 2200 },
+  { n: 14, world: "overprint", seed: "LVL-0014", kind: "absorb", target: 14, reward: 2200 },
   { n: 15, world: "overprint", seed: "LVL-0015", kind: "frugal", target: 26, reward: 2500 },
   { n: 16, world: "overprint", seed: "LVL-0016", kind: "score", target: 20000, reward: 2800 },
   { n: 17, world: "overprint", seed: "LVL-0017", kind: "combo", target: 110, reward: 3100 },
-  { n: 18, world: "overprint", seed: "LVL-0018", kind: "press", target: 8, reward: 3600, unlockEdition: "letterpress" },
+  { n: 18, world: "overprint", seed: "LVL-0018", kind: "press", target: 6, reward: 3600, unlockEdition: "letterpress" },
 
   // Final Edition — everything at once.
   { n: 19, world: "final", seed: "LVL-0019", kind: "finish", target: 1, reward: 2600 },
   { n: 20, world: "final", seed: "LVL-0020", kind: "collect", target: 150, reward: 3200 },
-  { n: 21, world: "final", seed: "LVL-0021", kind: "absorb", target: 28, reward: 3600 },
+  { n: 21, world: "final", seed: "LVL-0021", kind: "absorb", target: 19, reward: 3600 },
   // The budget covers the gates. A thrift objective asks for deliberate taps rather than
   // flailing, and every gate on the course is a tap the player is obliged to spend — so the
   // allowance has to carry them or the objective is asking for something the course forbids.
   { n: 22, world: "final", seed: "LVL-0022", kind: "frugal", target: 34, reward: 4000 },
-  { n: 23, world: "final", seed: "LVL-0023", kind: "score", target: 25000, reward: 4600 },
+  { n: 23, world: "final", seed: "LVL-0023", kind: "score", target: 17500, reward: 4600 },
   { n: 24, world: "final", seed: "LVL-0024", kind: "press", target: 22, reward: 8000, unlockEdition: "blueprint" },
 ];
 
@@ -714,6 +770,70 @@ export function levelPassed(level: LevelDef, r: RunSummary): boolean {
   }
 }
 
+/**
+ * Mastery: three marks per level instead of a pass/fail tick.
+ *
+ * Twenty-four levels is not much content, and once cleared each one had nothing left to say —
+ * a problem sharpened by making a replayed level bank no scrap, which removed the only reason
+ * left to open one again. Three marks turns twenty-four courses into seventy-two goals without
+ * authoring a single new course.
+ *
+ * The grades are deliberately **universal**, not per-level numbers. A tightened target on each
+ * level would be twenty-four more hand-tuned figures to keep reachable, and every one of them a
+ * chance to ship a goal nobody can meet. These three apply identically to all eight objective
+ * kinds and need no tuning at all:
+ *
+ *   1. **Cleared** — the level's own objective.
+ *   2. **Clean** — cleared without losing a cell.
+ *   3. **Perfect** — cleared, clean, and never on the wrong colour at a wall.
+ *
+ * The third is the one worth chasing, and it grades the thesis directly. Gates and the Press
+ * cost no cells, so a run can be spotless by the `hits` measure while having got every
+ * un-dodgeable wall on the course wrong. "You were the right colour every single time" is what
+ * playing this game well actually means.
+ *
+ * Mastery pays no scrap. The economy is already tuned, and seals and editions have always been
+ * the axis that money cannot touch — this belongs with them.
+ */
+export const MASTERY_TIERS = 3;
+
+export function levelMastery(level: LevelDef, r: RunSummary): number {
+  if (!levelPassed(level, r)) return 0;
+  if (r.hits > 0) return 1;
+  return r.wallsCrashed > 0 ? 2 : 3;
+}
+
+export function describeMastery(tier: number): string {
+  return tier >= 3 ? "Perfect" : tier === 2 ? "Clean" : tier === 1 ? "Cleared" : "";
+}
+
+/** What the next mark on this level would ask for, or "" once it is fully mastered. */
+export function nextMasteryAsk(tier: number): string {
+  if (tier <= 0) return "";
+  if (tier === 1) return "Clear it without losing a cell";
+  if (tier === 2) return "Clear it clean, and never on the wrong colour at a wall";
+  return "";
+}
+
+export function masteryOf(save: SaveData, n: number): number {
+  return save.levelMastery[String(n)] ?? 0;
+}
+
+/** Marks earned against marks available. The game's only overall completion figure. */
+export function masteryTotal(save: SaveData): { earned: number; possible: number } {
+  let earned = 0;
+  for (const lv of LEVELS) earned += masteryOf(save, lv.n);
+  return { earned, possible: LEVELS.length * MASTERY_TIERS };
+}
+
+/** Marks earned within one world, for the heading on the Levels screen. */
+export function masteryInWorld(save: SaveData, worldId: string): { earned: number; possible: number } {
+  const levels = levelsInWorld(worldId);
+  let earned = 0;
+  for (const lv of levels) earned += masteryOf(save, lv.n);
+  return { earned, possible: levels.length * MASTERY_TIERS };
+}
+
 export interface SaveData {
   scrap: number;
   lifetimeScrap: number;
@@ -739,6 +859,14 @@ export interface SaveData {
    * number the game can collect: the level where attempts pile up is the level people quit on.
    */
   levelAttempts: Record<string, number>;
+  /** Best mastery tier reached on each level, keyed by level number. Never goes down. */
+  levelMastery: Record<string, number>;
+  /**
+   * Whether the first-run tour has been seen through, or skipped. Stored rather than derived
+   * from the run count, because a player who quits mid-tour on their first run has not been
+   * taught anything and should still get it on their second.
+   */
+  coached: boolean;
 }
 
 function emptySave(): SaveData {
@@ -761,6 +889,8 @@ function emptySave(): SaveData {
     endlessBestScore: 0,
     levelsDone: 0,
     levelAttempts: {},
+    levelMastery: {},
+    coached: false,
   };
 }
 
@@ -788,6 +918,14 @@ export function loadSave(): SaveData {
       endlessBestScore: Number(parsed.endlessBestScore) || 0,
       levelsDone: Number(parsed.levelsDone) || 0,
       levelAttempts: parsed.levelAttempts ?? {},
+      // A save from before mastery existed keeps its cleared levels but starts every mark at
+      // zero. Back-filling "Cleared" would be a guess: nothing in the old save records whether
+      // those runs were clean, and awarding marks nobody earned devalues the whole thing.
+      levelMastery: parsed.levelMastery ?? {},
+      // A save written before the tour existed belongs to someone who has already worked the
+      // interface out for themselves. Interrupting their next run to explain the score counter
+      // would be worse than never having built it, so only a genuinely blank slate is coached.
+      coached: parsed.coached ?? (Number(parsed.runs) || 0) > 0,
     };
   } catch {
     return emptySave();

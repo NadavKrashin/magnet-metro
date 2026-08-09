@@ -7,7 +7,9 @@ name: CI
 # None of it was enforced until now.
 
 # Pull requests cover every feature branch, so pushes are watched only on the trunk — which
-# also avoids the usual duplicate run when a branch with an open PR is pushed to.
+# also avoids the usual duplicate run when a branch with an open PR is pushed to. The two jobs
+# below are then triggered differently: `test` runs everywhere, `verify` only on pull requests.
+# See the note above it.
 on:
   push:
     branches: [main]
@@ -47,8 +49,22 @@ jobs:
       - name: Balance report
         run: npm run balance
 
+  # Pull requests only, plus a manual run. Not on pushes to main.
+  #
+  # This job is the expensive half of CI — Chromium, a real build, and a full run played end
+  # to end. Re-running it on the merge commit repeats, on the trunk, work that just passed on
+  # the branch, and it is paid on every single deploy. `test` above still guards main, and it
+  # is the job that holds the game's actual rules.
+  #
+  # What that gives up is real and worth stating: nothing browser-checks the *merge commit*.
+  # If main moves between a PR's run and its merge, the tree that lands is one no browser ever
+  # loaded, and a runtime error that only appears in that combination reaches Pages. The
+  # protection against that is merging PRs that are up to date with main — the "Update branch"
+  # button, or branch protection with strict required checks — not a duplicate job here.
+  # `workflow_dispatch` runs it against main on demand when a merge looks non-trivial.
   verify:
     name: Verify in a real browser
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -63,8 +79,31 @@ jobs:
 
       # Only Chromium, and only its own dependencies. Installing every browser roughly triples
       # this step for engines the project never uses.
+      #
+      # Cached on the Playwright version rather than on the lockfile hash: the browser build a
+      # given Playwright expects is fixed, so any other dependency change would needlessly
+      # evict a 170 MB download that is still correct.
+      - name: Playwright version
+        id: playwright
+        run: echo "version=$(node -p "require('playwright/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Chromium
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+
       - name: Install Chromium
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps chromium
+
+      # The system libraries Chromium links against are installed by apt, not unpacked into the
+      # cached directory, so a cache hit restores the browser but not the things it needs to
+      # start. Skipping this would trade a slow job for one that fails on a missing .so.
+      - name: Install Chromium system libraries
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
 
       - name: Build single-file bundle
         run: npm run standalone

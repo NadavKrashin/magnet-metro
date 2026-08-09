@@ -60,6 +60,26 @@ export class Renderer implements View {
     this.bakeBackground();
   }
 
+  /**
+   * Where a world point sits on the *page*, in CSS pixels, with a CSS-pixel radius.
+   *
+   * `toScreenX`/`toScreenY` work in backing-store pixels, which are up to twice the CSS ones on
+   * a retina screen. Anything that positions a DOM element over the canvas — the first-run tour
+   * pointing at the drone — has to be given the page's own units or it lands at half height.
+   */
+  pageRect(worldX: number, worldY: number, worldR: number): {
+    x: number;
+    y: number;
+    r: number;
+  } {
+    const k = this.cw / (this.canvas.clientWidth || 1);
+    return {
+      x: this.toScreenX(worldX) / k,
+      y: this.toScreenY(worldY) / k,
+      r: (worldR * this.scale) / k,
+    };
+  }
+
   toScreenX(worldX: number): number {
     return this.cw / 2 + worldX * this.scale + this.shakeX;
   }
@@ -371,19 +391,30 @@ export class Renderer implements View {
       const plate = inkFor(h.polarity);
 
       if (edible) {
-        // Food, and it must not be confusable with either a pickup or a threat. Drawn as a
-        // heavy open ring: no fill, no spikes. A play test could not tell these apart from
-        // large scrap when both were solid discs, and misreading one as the other is the
-        // difference between eating a wall and flinching away from it.
+        /**
+         * Food, and it must not be confusable with either a pickup or a threat. Drawn as a
+         * heavy open ring: no fill, no spikes. A play test could not tell these apart from
+         * large scrap when both were solid discs, and misreading one as the other is the
+         * difference between eating a wall and flinching away from it.
+         *
+         * The colour plate is the whole point of the shape and has to be the loudest thing in
+         * it — this is the mark that says "food, *and* it is the colour you currently are",
+         * which is the single most important read on the screen. It used to be a thin stroke
+         * between two key rings, and a play report asked whether the rings "are supposed to be
+         * with no colours". They are not: measured, the Riot edition's teal sits 0.32 from its
+         * own black and Nightshift's aubergine 0.26, so on those two editions three concentric
+         * rings resolved into one grey object. Roughly twice the ink now, and the inner key
+         * ring is gone — it added black *inside* the colour and carried no information the
+         * outer trap does not.
+         */
         ctx.strokeStyle = plate;
-        ctx.lineWidth = Math.max(3, this.scale * 0.55);
-        this.traceFor(h.polarity)(x, y, r * 0.78);
+        ctx.lineWidth = Math.max(5, this.scale * 0.95);
+        this.traceFor(h.polarity)(x, y, r * 0.7);
         ctx.stroke();
+        // A hairline key trap on the outside only, the way a colour plate is trapped in print.
         ctx.strokeStyle = ink.key;
         ctx.lineWidth = Math.max(1.5, this.scale * 0.13);
         this.traceFor(h.polarity)(x, y, r * 1.06);
-        ctx.stroke();
-        this.traceFor(h.polarity)(x, y, r * 0.5);
         ctx.stroke();
         continue;
       }
@@ -586,18 +617,35 @@ export class Renderer implements View {
       // contact, ringed in the ink just swallowed, fading out. Nothing else in the game is
       // round, bright and centred on the drone, so it cannot be mistaken for the flat dark
       // slab that damage prints.
+      /**
+       * The white core is kept small on purpose.
+       *
+       * This pass is drawn over everything, including the open rings that say which hazards
+       * are edible — and white is the one thing that destroys them. A ring is a mid-value
+       * colour stroke trapped in a hairline of black: wash both in white and the black stays
+       * obviously dark while the colour goes to near-paper, so the mark loses its colour and
+       * keeps its outline. Since the flash re-triggers on every block, a wall made the rings
+       * pulse between coloured and empty. That was reported as the circles "twitching —
+       * sometimes it shows correctly and others it shows just the borders".
+       *
+       * The ink stop therefore takes over almost immediately. The bloom is just as large and
+       * just as loud, but what floods the page is the colour that was swallowed rather than
+       * white, so it *reinforces* the colour rule instead of erasing it. Only a small hot
+       * point at the moment of contact blows out.
+       */
       const bloom = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
-      bloom.addColorStop(0, `rgba(255,255,255,${0.95 * world.absorbFlash})`);
-      bloom.addColorStop(0.3, `${world.absorbFlashInk}${alphaHex(0.8 * world.absorbFlash)}`);
+      bloom.addColorStop(0, `rgba(255,255,255,${0.9 * world.absorbFlash})`);
+      bloom.addColorStop(0.12, `${world.absorbFlashInk}${alphaHex(0.85 * world.absorbFlash)}`);
       bloom.addColorStop(1, `${world.absorbFlashInk}00`);
       ctx.fillStyle = bloom;
       ctx.beginPath();
       ctx.arc(cx, cy, r, 0, TAU);
       ctx.fill();
 
-      // And a light lift across the rest of the page, so the whole frame registers the moment
-      // without washing the course out.
-      ctx.globalAlpha = world.absorbFlash * (0.1 + swell * 0.16);
+      // And a light lift across the rest of the page, so the whole frame registers the moment.
+      // Deliberately slight: this one reaches rings the bloom never touches, and it is pure
+      // wash — it carries no reward at that distance, only lost colour.
+      ctx.globalAlpha = world.absorbFlash * (0.05 + swell * 0.07);
       ctx.fillStyle = ink.paper;
       ctx.fillRect(0, 0, this.cw, this.ch);
       ctx.restore();

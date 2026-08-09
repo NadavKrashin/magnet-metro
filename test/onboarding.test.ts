@@ -42,6 +42,7 @@ function naiveRun(): RunSummary {
     maxCombo: 20,
     actions: 14,
     hits: 3,
+    wallsCrashed: 0,
   };
 }
 

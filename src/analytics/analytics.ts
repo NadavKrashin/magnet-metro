@@ -30,9 +30,19 @@ export type EventName =
   // The first-session funnel. These are the events that answer why people leave.
   | "tutorial_reached_tap"
   | "tutorial_completed"
+  // The guided tour, per beat. Which step people skip on is the only honest measure of how
+  // long the tour is allowed to be — and "skipped on step 2" is a very different problem from
+  // "skipped on step 6".
+  | "coach_step"
+  | "coach_skipped"
+  | "coach_finished"
+  | "howto_opened"
   | "first_run_completed"
   | "level_attempt"
   | "level_cleared"
+  // Which tier, on which level. The distribution of "perfect" marks is the clearest read
+  // there is on whether mastery is a goal people actually chase or a badge they ignore.
+  | "level_mastered"
   // Progression
   | "progress_reset"
   | "currency_earned"

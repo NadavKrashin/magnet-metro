@@ -11,7 +11,7 @@
 import { launchChromium } from "./browser.mjs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, rmSync } from "node:fs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const outDir = join(root, "shots");
@@ -135,11 +135,47 @@ console.log(
   `frame time: median ${fps.median.toFixed(1)}ms, worst ${fps.worst.toFixed(1)}ms`,
 );
 
-await page.waitForTimeout(9000);
-await page.screenshot({ path: join(outDir, "4-later.png") });
+/**
+ * The last two shots wait for the run to reach a state, rather than for a number of seconds.
+ *
+ * They used to sleep for 9 and 26 seconds. The run ends in about 21 — so the first sleep
+ * photographed a results sheet instead of the deep-run shot it is named for, and the second
+ * photographed the same sheet 26 seconds later. The two files came out byte-identical, which
+ * is how it was found: two of the five gameplay screenshots were one image, and the deep-run
+ * shot did not exist at all.
+ *
+ * How long the run lasts is a property of the course and of how long an unattended drone
+ * survives it, so no constant can be right. It is also 35 seconds of a 55-second script, paid
+ * once locally and twice more in CI on every deploy.
+ */
 
-// Let the run finish so the results sheet gets captured too.
-await page.waitForTimeout(26000);
+// Deep in the same run: a longer tail, a faster course, more on screen. Resolves early if the
+// drone dies first, so a short run cannot hang the script.
+const deep = await page
+  .waitForFunction(
+    () => {
+      const over = !document.getElementById("results").classList.contains("hidden");
+      // Endless runs print "859 m"; the leading number is the distance either way.
+      const metres = parseInt(document.getElementById("objective-progress").textContent, 10) || 0;
+      return over || metres >= 500 ? { over, metres } : null;
+    },
+    null,
+    { timeout: 60_000 },
+  )
+  .then((handle) => handle.jsonValue());
+
+if (deep.over) {
+  // Not fatal — but the file on disk is now from a previous run, and a stale store asset that
+  // looks fresh is worse than a missing one. Say so rather than leaving it to be noticed later.
+  rmSync(join(outDir, "4-later.png"), { force: true });
+  console.warn(`deep-run shot skipped: the run ended at ${deep.metres} m, before the 500 m mark`);
+} else {
+  await page.screenshot({ path: join(outDir, "4-later.png") });
+  console.log(`deep-run shot at ${deep.metres} m`);
+}
+
+// And the results sheet, the moment it is actually up.
+await page.waitForSelector("#results:not(.hidden)", { timeout: 60_000 });
 await page.screenshot({ path: join(outDir, "5-results.png") });
 
 await browser.close();
