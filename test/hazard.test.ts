@@ -152,6 +152,49 @@ check(
 check("a mismatched gate is counted", g.stats.gatesCrashed === 1, `${g.stats.gatesCrashed}`);
 
 /**
+ * A wall crash has to say what it took, in the player's own units.
+ *
+ * "I had no idea the gate removed the multiplier, and it is still kinda hard to tell unless you
+ * check it." The badge hides itself at x1, so the readout that changed is the readout that
+ * vanishes — the HUD cannot show the loss from its own state, and needs the world to hand it
+ * the figure that was destroyed.
+ */
+// The world above is set to a combo of 40 against a stock step of 8, so it crashes at x6.
+check(
+  "the crash reports the multiplier it destroyed",
+  g.crashMultiplier === 6,
+  `${g.crashMultiplier}`,
+);
+check(
+  "and names it, rather than naming the category",
+  g.floats.some((f) => f.text.startsWith("x6 GONE")),
+  g.floats.map((f) => f.text).join(" / ") || "(no float)",
+);
+
+// And it must not claim a loss that never happened. A run already at x1 had no multiplier to
+// take, and a readout that cries wolf is one players learn to ignore.
+const poor = new World(7, { anchors: false, charged: true });
+poor.setViewHeight(142);
+poor.field.radius = 22;
+poor.field.strength = 420;
+poor.scrap.length = 0;
+poor.hazards.length = 0;
+const poorGate = hazard(-1, 3.1, false, true);
+poorGate.y = 3;
+poor.hazards.push(poorGate);
+const py0 = poor.player.y;
+for (let i = 0; i < 20; i++) {
+  poor.field.polarity = 1;
+  poor.step(DT);
+  poor.player.y = py0;
+}
+check(
+  "a crash at x1 does not claim a multiplier was lost",
+  poor.crashMultiplier === 1 && !poor.floats.some((f) => f.text.includes("GONE")),
+  poor.floats.map((f) => f.text).join(" / ") || "(no float)",
+);
+
+/**
  * Flicking past a hazard must not pass through it.
  *
  * Steering moves the drone one-to-one with the thumb — `p.x += dragDx` — with no ceiling, so a

@@ -176,6 +176,7 @@ body {
 }
 
 .mult {
+  position: relative;
   font-family: var(--display);
   font-size: 22px;
   color: var(--red);
@@ -185,6 +186,67 @@ body {
 
 .mult.on {
   opacity: 1;
+}
+
+/**
+ * The multiplier just went, and this is the only place that can say so.
+ *
+ * Losing it was the quietest event in the game. The badge hides itself at x1, so an x8 knocked
+ * back to x1 did not flash or strike — it simply *faded out*, which is indistinguishable from
+ * nothing happening. A play report landed exactly there: "I had no idea the gate removed the
+ * multiplier, and it is still kinda hard to tell unless you check it."
+ *
+ * So the old value is held on screen for half a second and struck, in the same hard stuttered
+ * invert the cell readout uses. Same grammar, different readout — because a different thing
+ * was lost.
+ */
+.mult.lost {
+  opacity: 1;
+  padding: 2px 5px;
+  animation: mult-lost 0.52s steps(1, end);
+}
+
+/*
+ * Knocked out against the key plate rather than inverted. `filter: invert(1)` is the obvious
+ * way to make something flash and it was the first attempt, but on a red badge it prints
+ * *cyan on white* — two colours this game does not own. The small square cells get away with
+ * it because they read as a flicker; a 22px number reads as a colour, and the wrong one.
+ * Paper knocked out of black is the same emphasis, and it is something a press can actually do.
+ */
+@keyframes mult-lost {
+  0%,
+  36% {
+    transform: scale(1.5) rotate(-5deg);
+    color: var(--paper);
+    background: var(--key);
+  }
+  18%,
+  54% {
+    transform: scale(1.3) rotate(4deg);
+    color: var(--key);
+    background: transparent;
+  }
+  72% {
+    transform: scale(1.12);
+    color: var(--paper);
+    background: var(--key);
+  }
+  100% {
+    transform: none;
+    opacity: 0;
+  }
+}
+
+/* A hard bar through the number, the way a printed figure is cancelled. Takes the text colour
+   so it stays legible whether the badge is knocked out or printed. */
+.mult.lost::after {
+  content: "";
+  position: absolute;
+  left: -1px;
+  right: -1px;
+  top: 50%;
+  height: 3px;
+  background: currentColor;
 }
 
 .integrity {

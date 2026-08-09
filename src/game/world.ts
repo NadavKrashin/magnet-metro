@@ -202,6 +202,13 @@ export class World {
    * Press thirty-six, so without this the whole set piece is a single capped thump repeated —
    * the biggest moment in the game feeling identical to its smallest.
    */
+  /**
+   * The multiplier destroyed by the last wall crash, before the combo was reset.
+   *
+   * The HUD needs it to say what was taken: the badge hides itself at x1, so it cannot show
+   * the loss from its own state — by the time it renders, the thing that was lost is gone.
+   */
+  crashMultiplier = 0;
   absorbStreak = 0;
   private absorbStreakTimer = 0;
   /**
@@ -679,6 +686,8 @@ export class World {
   private crashGate(h: Hazard): void {
     this.stats.gatesCrashed += 1;
     this.stats.wallsCrashed += 1;
+    // Captured before the reset: this is the number the player is about to stop having.
+    this.crashMultiplier = this.multiplier;
     this.combo = 0;
     // Long enough to cross one row, and nothing more. It is not invulnerability.
     this.crashCooldown = 0.4;
@@ -703,14 +712,14 @@ export class World {
      * took, while a real hit prints "-1 CELL". A play report came back as "when I hit a line
      * barrier I don't get a life down" — the player could see the shake and read no price.
      */
-    const held = lost > 0 ? ` · -${lost} HELD` : "";
-    this.float(this.player.x, this.player.y + 4, `MULTIPLIER LOST${held}`, ink.key);
+    this.float(this.player.x, this.player.y + 4, this.describeCrash(lost), ink.key);
     this.events?.onHit("gate");
   }
 
   /** Mismatching the press: it costs most of what you were carrying, but not a cell. */
   private crashPress(h: Hazard): void {
     this.stats.wallsCrashed += 1;
+    this.crashMultiplier = this.multiplier;
     this.combo = 0;
     // Four rows deep, so the window has to span the whole structure.
     this.crashCooldown = 0.9;
@@ -726,8 +735,7 @@ export class World {
     }
     this.burst(h.x, h.y, 26, ink.key);
     // Same reasoning as the gate: say what it took. The Press bills far harder, so it says so.
-    const held = lost > 0 ? ` · -${lost} HELD` : "";
-    this.float(this.player.x, this.player.y + 4, `MULTIPLIER LOST${held}`, ink.key);
+    this.float(this.player.x, this.player.y + 4, this.describeCrash(lost), ink.key);
     this.events?.onHit("press");
   }
 
@@ -1078,6 +1086,21 @@ export class World {
     this.scrapLine(y, -13, 1, 6);
     this.scrapLine(y, 13, -1, 6);
     return 60;
+  }
+
+  /**
+   * What a wall crash actually took, in the player's own units.
+   *
+   * It used to read "MULTIPLIER LOST" unconditionally, which is a lie on a run that was
+   * already at x1 — there was nothing to lose, and claiming otherwise teaches the player to
+   * ignore the message. Naming the figure that went is also far more legible than naming the
+   * category: "x8 GONE" lands, "MULTIPLIER LOST" has to be decoded.
+   */
+  private describeCrash(held: number): string {
+    const parts: string[] = [];
+    if (this.crashMultiplier > 1) parts.push(`x${this.crashMultiplier} GONE`);
+    if (held > 0) parts.push(`-${held} HELD`);
+    return parts.length > 0 ? parts.join(" · ") : "WRONG COLOUR";
   }
 
   /** A vertical run of same-colour scrap. The clearest possible read of "these belong together". */

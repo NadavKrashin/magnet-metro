@@ -346,6 +346,21 @@ They now move in opposite directions:
 - **Damage is the key plate** — red and then heavy black, flat across the whole frame. Measured
   at 18% of pixels driven below a quarter brightness.
 
+**And the multiplier announces its own loss.** Losing it was the quietest event in the game:
+the badge is hidden at x1, so an x8 knocked back by a wall did not flash or strike — it simply
+*faded out*, which is indistinguishable from nothing happening. A play report landed exactly
+there: "I had no idea the gate removed the multiplier, and it is still kinda hard to tell unless
+you check it." The old value is now held on screen for half a second and struck through, in the
+same hard stuttered stamp the cell readout uses — same grammar, different readout, because a
+different thing was lost. The float names the figure too: "x8 GONE · -12 HELD" rather than
+"MULTIPLIER LOST", which is both easier to read and honest on a run that was already at x1 and
+had nothing to lose.
+
+The stamp knocks paper out of the key plate rather than using `filter: invert(1)`. Inverting was
+the first attempt and it prints *cyan on white* — two colours this game does not own. The small
+square cells get away with it because they read as a flicker; a 22-pixel number reads as a
+colour, and the wrong one.
+
 **A lethal mark is reserved for the one lethal thing.** Every non-edible hazard used to be
 drawn as solid black spikes — mines, colour gates and the Press alike. But a gate and the Press
 cost the multiplier and a share of the haul and *never* a cell, so the picture said "this takes

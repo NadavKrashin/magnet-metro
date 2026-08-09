@@ -165,6 +165,11 @@ class Game {
   private isEndless = false;
   /** True while the current run is carrying the guided tour. */
   private coaching = false;
+  /**
+   * While set, the multiplier readout is holding the value a wall just took, so the render
+   * loop must not overwrite it with the current one — which is x1, and therefore hidden.
+   */
+  private multLostUntil = 0;
   /** How many tour beats this run has shown. The tour is strictly ordered, so a count is enough. */
   private coachDone = 0;
   /** The beat currently on screen, for the analytics funnel and for re-anchoring on resize. */
@@ -560,6 +565,25 @@ class Game {
     }
   }
 
+  /**
+   * Hold the multiplier that was just taken on screen, and strike it.
+   *
+   * The badge is hidden at x1, so the moment a wall wipes the combo the readout simply fades
+   * out — the one element that changed becomes the one element that is not there. A play
+   * report put it exactly: "I had no idea the gate removed the multiplier, and it is still
+   * kinda hard to tell unless you check it."
+   */
+  private flashMultiplierLost(mult: number): void {
+    // Nothing was lost. Announcing a loss anyway is how a readout teaches people to ignore it.
+    if (mult <= 1) return;
+    this.multEl.textContent = `x${mult}`;
+    this.multEl.classList.add("on");
+    this.multEl.classList.remove("lost");
+    void this.multEl.offsetWidth; // restart the animation on back-to-back walls
+    this.multEl.classList.add("lost");
+    this.multLostUntil = performance.now() + 520;
+  }
+
   private buildIntegrity(): void {
     this.integrityEl.innerHTML = "";
     for (let i = 0; i < this.world.maxIntegrity; i++) {
@@ -624,6 +648,8 @@ class Game {
 
     this.revivedThisRun = false;
     this.quitRun = false;
+    this.multLostUntil = 0;
+    this.multEl.classList.remove("lost");
     this.coaching = coachThisRun;
     this.coachDone = 0;
     this.coachStep = -1;
@@ -679,6 +705,7 @@ class Game {
         } else {
           // A wall got wrong. Costs the haul, never a cell, and must not feel like one.
           haptics.pressCrash();
+          this.flashMultiplierLost(this.world.crashMultiplier);
         }
       },
       onFlip: (toRed) => {
@@ -1564,9 +1591,14 @@ class Game {
     if (this.state !== "playing" && this.state !== "coaching") return;
     const w = this.world;
     this.scoreEl.textContent = String(w.score);
+    // Left alone while the "you just lost this" stamp is playing; it is showing the old value
+    // on purpose, and the live one is x1 and invisible.
     const mult = w.multiplier;
-    this.multEl.textContent = `x${mult}`;
-    this.multEl.classList.toggle("on", mult > 1);
+    if (performance.now() >= this.multLostUntil) {
+      this.multEl.textContent = `x${mult}`;
+      this.multEl.classList.toggle("on", mult > 1);
+      this.multEl.classList.remove("lost");
+    }
     if (this.isEndless) {
       // The bar measures the run against the player's own record rather than a finish line.
       const best = Math.max(this.save.endlessBest, 400);
