@@ -61,6 +61,8 @@ import { PolarityMechanic } from "./mechanics/polarity";
 const RUNS_KEY = "mm_runs_v1";
 const MUTE_KEY = "mm_muted_v1";
 const APP_VERSION = "1.0.0";
+/** Injected by vite from the git short SHA. See vite.config.ts. */
+declare const __BUILD_ID__: string;
 
 interface RunRecord {
   mechanic: string;
@@ -827,7 +829,7 @@ class Game {
     el("code-help").classList.add("hidden");
     el("btn-privacy").classList.toggle("hidden", !this.ads.canShowPrivacyOptions);
     el("btn-policy").classList.toggle("hidden", PRIVACY_POLICY_URL.length === 0);
-    el("version").textContent = `v${APP_VERSION}`;
+    el("version").textContent = `v${APP_VERSION} · build ${__BUILD_ID__}`;
   }
 
   private resetProgress(): void {
