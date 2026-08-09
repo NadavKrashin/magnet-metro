@@ -558,6 +558,18 @@ export class World {
         if (this.crashCooldown <= 0 && !f.invulnerable) {
           if (h.press) this.crashPress(h);
           else this.crashGate(h);
+        } else {
+          /**
+           * Contact the cooldown is swallowing, acknowledged rather than ignored.
+           *
+           * A Press is four rows and thirty-six blocks and bills once, so for the 0.9 seconds
+           * it takes to cross one, every further block the drone touches used to produce
+           * *nothing at all* — no flash, no sound, no float. Changing colour half way through
+           * a wall and ploughing into the rest of it is therefore completely silent, which is
+           * exactly the "I bump into it and nothing happens" this was reported as. The
+           * mercy window below already had this treatment; the crash window was missed.
+           */
+          this.grazeFlash = Math.max(this.grazeFlash, 0.6);
         }
       } else if (this.invulnTimer <= 0 && !f.invulnerable) {
         this.takeHit(h);
