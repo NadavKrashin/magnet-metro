@@ -419,8 +419,60 @@ export class Renderer implements View {
         continue;
       }
 
-      // Threat. Solid black key plate with the colour plate showing at the edges, and a ring
-      // of hard spikes. Heavy black is the loudest thing a two-colour print can do.
+      /**
+       * An un-dodgeable wall met on the wrong colour: a gate, or the closing Press.
+       *
+       * These cost the multiplier and a share of the haul and **never a cell** — but until now
+       * they were drawn with the same solid black spikes as a mine, which is the one mark in
+       * this game that means "this takes a life". So the picture said one thing and the rules
+       * did another, and a player flying through a spiked wall and losing nothing had every
+       * reason to call it a bug. It was reported three times, and each time the rule was
+       * explained when the drawing was the thing at fault.
+       *
+       * A barred slab instead: flat, wide, hard-edged, no points. It reads as a barrier rather
+       * than a weapon, and because the slabs are wider than the spacing of a gate's nine
+       * blocks they close into one continuous wall — which is a truer picture of an
+       * un-dodgeable row than nine separate objects ever was.
+       */
+      if (h.press || h.gate) {
+        const hw = r * 1.2;
+        const hh = r * 0.72;
+        ctx.save();
+        // The colour plate, printed a hair off register, so the wall still says which colour
+        // it is — that is the whole reason it is in the player's way.
+        ctx.fillStyle = plate;
+        ctx.fillRect(
+          x - hw + MISREGISTER_X * this.scale,
+          y - hh + MISREGISTER_Y * this.scale,
+          hw * 2,
+          hh * 2,
+        );
+        // Key bars, clipped to the slab. Diagonal hatching is the universal printed mark for
+        // "closed", and it is nothing like a spike.
+        ctx.beginPath();
+        ctx.rect(x - hw, y - hh, hw * 2, hh * 2);
+        ctx.save();
+        ctx.clip();
+        ctx.strokeStyle = ink.key;
+        ctx.lineWidth = Math.max(2, this.scale * 0.3);
+        const step = Math.max(6, hh * 1.15);
+        for (let bx = x - hw - hh * 2; bx < x + hw + hh * 2; bx += step) {
+          ctx.beginPath();
+          ctx.moveTo(bx, y + hh);
+          ctx.lineTo(bx + hh * 2, y - hh);
+          ctx.stroke();
+        }
+        ctx.restore();
+        ctx.lineWidth = Math.max(2, this.scale * 0.24);
+        ctx.strokeStyle = ink.key;
+        ctx.strokeRect(x - hw, y - hh, hw * 2, hh * 2);
+        ctx.restore();
+        continue;
+      }
+
+      // Threat, and the only thing on the course that costs a cell. Solid black key plate with
+      // the colour plate showing at the edges, and a ring of hard spikes. Heavy black is the
+      // loudest thing a two-colour print can do, and it is reserved for the one lethal mark.
       const spike: Trace = (cx, cy, rr) => {
         const ctx = this.ctx;
         ctx.beginPath();

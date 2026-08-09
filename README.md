@@ -346,6 +346,16 @@ They now move in opposite directions:
 - **Damage is the key plate** — red and then heavy black, flat across the whole frame. Measured
   at 18% of pixels driven below a quarter brightness.
 
+**A lethal mark is reserved for the one lethal thing.** Every non-edible hazard used to be
+drawn as solid black spikes — mines, colour gates and the Press alike. But a gate and the Press
+cost the multiplier and a share of the haul and *never* a cell, so the picture said "this takes
+a life" over something that cannot. A player flying through a spiked wall and losing nothing had
+every reason to call it a bug, and did, three times; each time the rule was explained when the
+drawing was the thing at fault. Mismatched walls are now a barred slab — flat, hard-edged, no
+points, and wide enough that a gate's nine blocks close into one continuous barrier, which is a
+truer picture of an un-dodgeable row than nine separate objects. Spikes now mean exactly one
+thing.
+
 **A matching hazard is drawn as an open ring**, not a disc — a play test could not tell solid
 edible hazards apart from large scrap, and misreading one as the other is the difference
 between eating a wall and flinching away from it. The colour plate has to be the loudest thing
